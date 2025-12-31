@@ -4,17 +4,17 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-#odra_dependency
+odra = { version = "2.4.0", features = [], default-features = false }
 
 [dev-dependencies]
-#odra_test_dependency
+odra-test = { version = "2.4.0", features = [], default-features = false }
 
 [build-dependencies]
-#odra_build_dependency
+odra-build = { version = "2.4.0", features = [], default-features = false }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-#odra_build_dependency
-#odra_cli_dependency
+odra-build = { version = "2.4.0", features = [], default-features = false }
+odra-cli = { version = "2.4.0", features = [], default-features = false }
 
 [[bin]]
 name = "casper_credentials_build_contract"
