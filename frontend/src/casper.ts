@@ -170,19 +170,27 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string): Promise<stri
     const result = DeployUtil.deployFromJson(signedDeployJson)
     if (result.err) throw new Error('Failed to parse signed deploy: ' + result.err)
     signedDeploy = result.val
-  } else if (signResult.signature) {
-    // Wallet returned just signature - convert to hex string if needed
-    console.log('Using signResult.signature, type:', typeof signResult.signature)
+  } else if (signResult.signatureHex || signResult.signature) {
+    // Wallet returned signature - prefer signatureHex (string) over signature (object)
     let sigHex: string
-    const sig = signResult.signature
-    if (typeof sig === 'string') {
-      sigHex = sig.startsWith('0x') ? sig.slice(2) : sig
-    } else if (sig instanceof Uint8Array) {
-      sigHex = Array.from(sig).map((b: number) => b.toString(16).padStart(2, '0')).join('')
-    } else if (Array.isArray(sig)) {
-      sigHex = sig.map((b: number) => b.toString(16).padStart(2, '0')).join('')
+    
+    if (signResult.signatureHex && typeof signResult.signatureHex === 'string') {
+      console.log('Using signResult.signatureHex')
+      sigHex = signResult.signatureHex.startsWith('0x') 
+        ? signResult.signatureHex.slice(2) 
+        : signResult.signatureHex
     } else {
-      throw new Error('Unknown signature format: ' + typeof sig)
+      console.log('Using signResult.signature, type:', typeof signResult.signature)
+      const sig = signResult.signature
+      if (typeof sig === 'string') {
+        sigHex = sig.startsWith('0x') ? sig.slice(2) : sig
+      } else if (sig instanceof Uint8Array) {
+        sigHex = Array.from(sig).map((b: number) => b.toString(16).padStart(2, '0')).join('')
+      } else if (Array.isArray(sig)) {
+        sigHex = sig.map((b: number) => b.toString(16).padStart(2, '0')).join('')
+      } else {
+        throw new Error('Unknown signature format: ' + typeof sig)
+      }
     }
     
     console.log('Signature hex (first 20 chars):', sigHex.substring(0, 20))
