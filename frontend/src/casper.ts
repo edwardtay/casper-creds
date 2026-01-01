@@ -19,20 +19,15 @@ const contractClient = new Contracts.Contract(casperClient)
 
 // Set contract hash if available
 if (CONTRACT_HASH) {
-  // If it's a package hash, use setContractPackageHash
-  // This ensures the SDK uses StoredVersionedContractByHash
-  if (CONTRACT_HASH.startsWith('contract-package-')) {
-    console.log('Configuring as Contract Package:', CONTRACT_HASH)
-    contractClient.setContractPackageHash(CONTRACT_HASH)
-  } else {
-    // Standard contract hash
-    let cleanHash = CONTRACT_HASH
-    if (cleanHash.startsWith('contract-')) cleanHash = cleanHash.replace('contract-', 'hash-')
-    else if (!cleanHash.startsWith('hash-')) cleanHash = 'hash-' + cleanHash
+  // Standard contract hash configuration
+  // Note: For versioned calls, we handle logic in specific functions manually
+  let cleanHash = CONTRACT_HASH
+  if (cleanHash.startsWith('contract-package-')) cleanHash = cleanHash.replace('contract-package-', 'hash-')
+  else if (cleanHash.startsWith('contract-')) cleanHash = cleanHash.replace('contract-', 'hash-')
+  else if (!cleanHash.startsWith('hash-')) cleanHash = 'hash-' + cleanHash
 
-    console.log('Configuring as Contract Hash:', cleanHash)
-    contractClient.setContractHash(cleanHash)
-  }
+  // contractClient.setContractHash(cleanHash) // This expects hash- format
+  // We'll leave it for now as some other functions might use it as standard contract
 }
 
 export interface OnChainCredential {
