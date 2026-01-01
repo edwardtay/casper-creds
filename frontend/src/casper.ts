@@ -118,19 +118,57 @@ export async function getCredentialFromChain(credentialId: number): Promise<OnCh
 async function signAndSubmitDeploy(deploy: any, publicKey: string, clickRef?: any): Promise<string> {
   const deployJson = DeployUtil.deployToJson(deploy)
   
-  // Try CSPR.click SDK first (recommended for Casper)
-  if (clickRef && typeof clickRef.send === 'function') {
-    console.log('Using CSPR.click send()')
-    try {
-      const result = await clickRef.send(deployJson, publicKey)
-      console.log('CSPR.click result:', result)
-      if (result?.cancelled) throw new Error('User cancelled signing')
-      if (result?.deployHash) return result.deployHash
-      if (result?.deploy_hash) return result.deploy_hash
-      throw new Error('No deploy hash in CSPR.click response')
-    } catch (e: any) {
-      console.log('CSPR.click send failed:', e.message)
-      // Fall through to try Casper Wallet
+  // Log clickRef methods if available
+  if (clickRef) {
+    const methods = Object.keys(clickRef).filter(k => typeof clickRef[k] === 'function')
+    console.log('CSPR.click methods:', methods)
+    
+    // Try different CSPR.click methods for signing
+    if (typeof clickRef.signAndSend === 'function') {
+      console.log('Using CSPR.click signAndSend()')
+      try {
+        const result = await clickRef.signAndSend(deployJson, publicKey)
+        console.log('signAndSend result:', result)
+        if (result?.cancelled) throw new Error('User cancelled signing')
+        if (result?.deployHash) return result.deployHash
+        if (result?.deploy_hash) return result.deploy_hash
+      } catch (e: any) {
+        console.log('signAndSend failed:', e.message)
+      }
+    }
+    
+    if (typeof clickRef.send === 'function') {
+      console.log('Using CSPR.click send()')
+      try {
+        const result = await clickRef.send(deployJson, publicKey)
+        console.log('send result:', result)
+        if (result?.cancelled) throw new Error('User cancelled signing')
+        if (result?.deployHash) return result.deployHash
+        if (result?.deploy_hash) return result.deploy_hash
+      } catch (e: any) {
+        console.log('send failed:', e.message)
+      }
+    }
+    
+    if (typeof clickRef.signDeploy === 'function') {
+      console.log('Using CSPR.click signDeploy()')
+      try {
+        const result = await clickRef.signDeploy(deployJson, publicKey)
+        console.log('signDeploy result:', result)
+        if (result?.cancelled) throw new Error('User cancelled signing')
+        // If we get a signed deploy back, submit it ourselves
+        if (result?.deploy) {
+          const signedDeployJson = typeof result.deploy === 'string' ? JSON.parse(result.deploy) : result.deploy
+          const deployResult = DeployUtil.deployFromJson(signedDeployJson)
+          if (!deployResult.err) {
+            const hash = await casperClient.putDeploy(deployResult.val)
+            return hash
+          }
+        }
+        if (result?.deployHash) return result.deployHash
+      } catch (e: any) {
+        console.log('signDeploy failed:', e.message)
+      }
     }
   }
   
@@ -146,7 +184,6 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string, clickRef?: an
     await wallet.requestConnection()
   }
   
-  // Try wallet.sign with deploy JSON
   console.log('Using Casper Wallet sign()')
   const deployJsonStr = JSON.stringify(deployJson)
   const signResult = await wallet.sign(deployJsonStr, publicKey)
