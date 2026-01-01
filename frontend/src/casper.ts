@@ -336,6 +336,8 @@ export interface CredentialMetadata {
   holderName?: string
   grade?: string
   skills?: string
+  licenseNumber?: string
+  idNumber?: string
 }
 
 // Upload metadata to IPFS via Pinata (if configured) or return mock hash

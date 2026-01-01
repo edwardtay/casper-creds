@@ -441,7 +441,7 @@ function LandingPage({ setRole, chainStats, credentials }: { setRole:(r:Role)=>v
 
 function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }: { pubKey:string, credentials:Credential[], addCredential:(c:Credential)=>void, setToast:(t:any)=>void, clickRef:any }) {
   const [view, setView] = useState<'issue'|'batch'|'history'>('issue')
-  const [form, setForm] = useState({ holder:'', type:'degree', title:'', institution:'', startDate:'', expires:'', holderName:'', description:'', grade:'', skills:'' })
+  const [form, setForm] = useState({ holder:'', type:'degree', title:'', institution:'', startDate:'', expires:'', holderName:'', description:'', grade:'', skills:'', licenseNumber:'', idNumber:'' })
   const [loading, setLoading] = useState(false)
   const [csv, setCsv] = useState('')
   const [preview, setPreview] = useState<any[]>([])
@@ -734,6 +734,8 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }
           holderName: form.holderName,
           grade: form.grade,
           skills: form.skills,
+          licenseNumber: form.licenseNumber,
+          idNumber: form.idNumber,
           imageUrl: imageHash ? `ipfs://${imageHash}` : undefined
         })
         console.log('IPFS hash:', metadataHash)
@@ -781,7 +783,7 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }
           }
           addCredential(cred)
           setToast({t:'ok', m:`✓ On-chain: ${localId}${metadataHash ? ' + IPFS' : ''}`})
-          setForm({ holder:'', type:'degree', title:'', institution:'', startDate:'', expires:'', holderName:'', description:'', grade:'', skills:'' })
+          setForm({ holder:'', type:'degree', title:'', institution:'', startDate:'', expires:'', holderName:'', description:'', grade:'', skills:'', licenseNumber:'', idNumber:'' })
           setImageFile(null)
           setImagePreview('')
           setLoading(false)
@@ -844,13 +846,77 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }
                 )}
               </div>
               <div className="col-span-2"><label className="block text-sm text-zinc-400 mb-2">Holder Address *</label><input value={form.holder} onChange={e=>setForm({...form,holder:e.target.value})} placeholder="02abc... (Casper public key)" className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700 font-mono text-sm" required/></div>
-              <div className="col-span-2"><label className="block text-sm text-zinc-400 mb-2">Holder Name</label><input value={form.holderName} onChange={e=>setForm({...form,holderName:e.target.value})} placeholder="e.g. John Smith" className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700"/></div>
-              <div><label className="block text-sm text-zinc-400 mb-2">Start Date</label><input type="date" value={form.startDate} onChange={e=>setForm({...form,startDate:e.target.value})} className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700"/></div>
-              <div><label className="block text-sm text-zinc-400 mb-2">Expiration</label><input type="date" value={form.expires} onChange={e=>setForm({...form,expires:e.target.value})} className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700"/></div>
-              <div className="col-span-2"><label className="block text-sm text-zinc-400 mb-2">Institution *</label><input value={form.institution} onChange={e=>setForm({...form,institution:e.target.value})} placeholder="e.g. MIT, AWS, State Board" className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700" required/></div>
-              <div className="col-span-2"><label className="block text-sm text-zinc-400 mb-2">Title *</label><input value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder="e.g. Bachelor of Science in Computer Science" className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700" required/></div>
-              <div><label className="block text-sm text-zinc-400 mb-2">Grade/Score</label><input value={form.grade} onChange={e=>setForm({...form,grade:e.target.value})} placeholder="e.g. 3.8 GPA, A+, Pass" className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700"/></div>
-              <div><label className="block text-sm text-zinc-400 mb-2">Skills</label><input value={form.skills} onChange={e=>setForm({...form,skills:e.target.value})} placeholder="e.g. Python, AWS, Leadership" className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700"/></div>
+              <div className="col-span-2"><label className="block text-sm text-zinc-400 mb-2">{form.type === 'employment' ? 'Employee Name' : 'Holder Name'}</label><input value={form.holderName} onChange={e=>setForm({...form,holderName:e.target.value})} placeholder="e.g. John Smith" className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700"/></div>
+              
+              {/* Institution/Company/Authority - varies by type */}
+              <div className="col-span-2"><label className="block text-sm text-zinc-400 mb-2">
+                {form.type === 'degree' ? 'University/Institution *' : 
+                 form.type === 'certificate' ? 'Issuing Organization *' : 
+                 form.type === 'license' ? 'Licensing Authority *' : 
+                 form.type === 'employment' ? 'Company/Employer *' : 
+                 'Issuing Authority *'}
+              </label><input value={form.institution} onChange={e=>setForm({...form,institution:e.target.value})} placeholder={
+                form.type === 'degree' ? 'e.g. MIT, Stanford University' : 
+                form.type === 'certificate' ? 'e.g. AWS, Google, Coursera' : 
+                form.type === 'license' ? 'e.g. State Board of Engineering' : 
+                form.type === 'employment' ? 'e.g. Google, Amazon, Startup Inc' : 
+                'e.g. Government Agency'
+              } className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700" required/></div>
+              
+              {/* Title - varies by type */}
+              <div className="col-span-2"><label className="block text-sm text-zinc-400 mb-2">
+                {form.type === 'degree' ? 'Degree Title *' : 
+                 form.type === 'certificate' ? 'Certificate Name *' : 
+                 form.type === 'license' ? 'License Type *' : 
+                 form.type === 'employment' ? 'Job Title *' : 
+                 'Document Type *'}
+              </label><input value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder={
+                form.type === 'degree' ? 'e.g. Bachelor of Science in Computer Science' : 
+                form.type === 'certificate' ? 'e.g. AWS Solutions Architect Professional' : 
+                form.type === 'license' ? 'e.g. Professional Engineer, Medical License' : 
+                form.type === 'employment' ? 'e.g. Senior Software Engineer' : 
+                'e.g. Passport, Driver License, National ID'
+              } className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700" required/></div>
+              
+              {/* License/ID Number - only for license and identity */}
+              {(form.type === 'license' || form.type === 'identity') && (
+                <div className="col-span-2"><label className="block text-sm text-zinc-400 mb-2">
+                  {form.type === 'license' ? 'License Number *' : 'ID/Document Number *'}
+                </label><input value={form.type === 'license' ? form.licenseNumber : form.idNumber} onChange={e=>setForm({...form, [form.type === 'license' ? 'licenseNumber' : 'idNumber']: e.target.value})} placeholder={
+                  form.type === 'license' ? 'e.g. PE-12345-2024' : 'e.g. A12345678'
+                } className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700 font-mono" required/></div>
+              )}
+              
+              {/* Dates - labels vary by type */}
+              <div><label className="block text-sm text-zinc-400 mb-2">
+                {form.type === 'degree' ? 'Enrollment Date' : 
+                 form.type === 'employment' ? 'Start Date' : 
+                 'Issue Date'}
+              </label><input type="date" value={form.startDate} onChange={e=>setForm({...form,startDate:e.target.value})} className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700"/></div>
+              <div><label className="block text-sm text-zinc-400 mb-2">
+                {form.type === 'degree' ? 'Graduation Date' : 
+                 form.type === 'employment' ? 'End Date' : 
+                 form.type === 'certificate' || form.type === 'license' || form.type === 'identity' ? 'Expiration Date' : 
+                 'End Date'}
+              </label><input type="date" value={form.expires} onChange={e=>setForm({...form,expires:e.target.value})} className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700"/></div>
+              
+              {/* Grade - only for degree and certificate */}
+              {(form.type === 'degree' || form.type === 'certificate') && (
+                <div className={form.type === 'degree' ? '' : 'col-span-2'}><label className="block text-sm text-zinc-400 mb-2">
+                  {form.type === 'degree' ? 'GPA/Grade' : 'Score/Result'}
+                </label><input value={form.grade} onChange={e=>setForm({...form,grade:e.target.value})} placeholder={
+                  form.type === 'degree' ? 'e.g. 3.8 GPA, First Class Honours' : 'e.g. Pass, 95%, Distinction'
+                } className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700"/></div>
+              )}
+              
+              {/* Major/Skills - only for degree and certificate */}
+              {form.type === 'degree' && (
+                <div><label className="block text-sm text-zinc-400 mb-2">Major/Field</label><input value={form.skills} onChange={e=>setForm({...form,skills:e.target.value})} placeholder="e.g. Computer Science, Engineering" className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700"/></div>
+              )}
+              {form.type === 'certificate' && (
+                <div className="col-span-2"><label className="block text-sm text-zinc-400 mb-2">Skills Covered</label><input value={form.skills} onChange={e=>setForm({...form,skills:e.target.value})} placeholder="e.g. AWS, Cloud Architecture, EC2, S3" className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700"/></div>
+              )}
+              
               <div className="col-span-2"><label className="block text-sm text-zinc-400 mb-2">Description</label><textarea value={form.description} onChange={e=>setForm({...form,description:e.target.value})} placeholder="Additional details about the credential..." rows={2} className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700"/></div>
               <div className="col-span-2"><button disabled={loading} className="w-full py-4 bg-gradient-to-r from-purple-600 to-purple-700 rounded-xl font-medium disabled:opacity-50 text-lg">{loading ? 'Issuing...' : '📝 Issue Credential'}</button></div>
             </div>
