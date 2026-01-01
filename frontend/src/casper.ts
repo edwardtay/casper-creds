@@ -218,7 +218,11 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string, clickRef?: an
   const walletMethods = Object.keys(wallet).filter(k => typeof wallet[k] === 'function')
   console.log('Wallet methods:', walletMethods)
 
-  const deployJsonStr = JSON.stringify(deployJson)
+  // Clean deploy JSON for signing: remove the outer "deploy" wrapper if present
+  // The SDK's deployToJson returns { deploy: { ... } } but wallet expects just { ... }
+  const rawDeploy = (deployJson as any).deploy || deployJson
+  const deployJsonStr = JSON.stringify(rawDeploy)
+  console.log('Signing raw deploy JSON:', deployJsonStr)
 
   // Use signDeploy if available (preferred for newer wallet), otherwise sign
   let signResult
@@ -241,13 +245,20 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string, clickRef?: an
       ? JSON.parse(signResult.deploy)
       : signResult.deploy
 
-    const result = DeployUtil.deployFromJson(signedDeployJson)
-    if (!result.err) {
-      const hash = await casperClient.putDeploy(result.val)
-      return hash
-    }
+    // Normalize: SDK expects { deploy: ... } struct usually, but let's handle both
+    // If it has approvals, it's the inner object
+    const deployObj = signedDeployJson.deploy || signedDeployJson
 
-    // Try RPC directly via proxy
+    // SDK check
+    try {
+      const result = DeployUtil.deployFromJson(deployObj)
+      if (!result.err) {
+        const hash = await casperClient.putDeploy(result.val)
+        return hash
+      }
+    } catch (e) { console.warn('SDK check failed', e) }
+
+    // RPC Fallback
     const rpcUrl = getRpcUrl()
     const rpcResponse = await fetch(rpcUrl, {
       method: 'POST',
@@ -255,7 +266,7 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string, clickRef?: an
       body: JSON.stringify({
         jsonrpc: '2.0',
         method: 'account_put_deploy',
-        params: { deploy: signedDeployJson.deploy || signedDeployJson },
+        params: { deploy: deployObj },
         id: Date.now()
       })
     })
