@@ -581,8 +581,14 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }
       }
       
       // Extract holder name - look for line after "certify that" or standalone name pattern
+      // Exclude words that are likely titles, not names
+      const titleWords = /professional|engineer|bachelor|master|doctor|certificate|license|degree|certified|specialist|technician|architect|manager|director|officer|analyst/i
+      
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i]
+        // Skip lines that look like credential titles
+        if (titleWords.test(line)) continue
+        
         // Check if this line or previous mentions "certify"
         if (/certify|awarded to|granted to|presented to/i.test(lines[i-1] || '')) {
           if (/^[A-Z][a-z]+\s+[A-Z][a-z]+$/.test(line)) {
