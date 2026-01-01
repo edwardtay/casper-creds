@@ -277,26 +277,46 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string, clickRef?: an
 
   // If wallet returned only signature (standard behavior for signDeploy)
   if (signResult.signature) {
-    console.log('Wallet returned signature, attaching to deploy...')
-    const signedDeployJson = JSON.parse(JSON.stringify(deployJson))
+    console.log('Wallet returned signature, attaching to ORIGINAL deploy object...')
 
-    // Normalize deploy object - check if wrapped in { deploy: ... }
-    const deployObj = signedDeployJson.deploy || signedDeployJson
-
-    // Ensure approvals array exists
-    if (!deployObj.approvals) {
-      deployObj.approvals = []
+    // Quick hex conversion helper to avoid dependency issues
+    const toHex = (data: any) => {
+      if (typeof data === 'string') return data;
+      return Array.from(new Uint8Array(data))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
     }
 
-    // Add the signature
-    deployObj.approvals.push({
+    // Convert Uint8Array signature to hex string if needed
+    let signatureHex = toHex(signResult.signature)
+
+    // Sometimes the wallet might return it in a different property
+    if (signResult.signatureHex) signatureHex = signResult.signatureHex
+
+    console.log('Signature Hex:', signatureHex)
+
+    // Create the approval object
+    // Verify format: SDK expects just the hex string for 'signature'
+    const approval = {
       signer: publicKey,
-      signature: signResult.signature
-    })
+      signature: signatureHex
+    }
+
+    // Apply to the ORIGINAL deploy object to avoid serialization mismatch
+    // The SDK deploy object usually has an 'approvals' array
+    if (!deploy.approvals) deploy.approvals = []
+
+    // Check if already signed to avoid duplicates
+    const alreadySigned = deploy.approvals.some((a: any) => a.signer === publicKey)
+    if (!alreadySigned) {
+      deploy.approvals.push(approval)
+    }
+
+    console.log('Submitting deploy with hash:', Number(deploy.hash))
 
     // Try via SDK first
     try {
-      const result = DeployUtil.deployFromJson(signedDeployJson)
+      const result = DeployUtil.deployFromJson(DeployUtil.deployToJson(deploy))
       if (!result.err) {
         const hash = await casperClient.putDeploy(result.val)
         return hash
@@ -313,7 +333,7 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string, clickRef?: an
       body: JSON.stringify({
         jsonrpc: '2.0',
         method: 'account_put_deploy',
-        params: { deploy: deployObj },
+        params: { deploy: DeployUtil.deployToJson(deploy).deploy },
         id: Date.now()
       })
     })
