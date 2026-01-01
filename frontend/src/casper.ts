@@ -129,30 +129,23 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string): Promise<stri
   
   const deployJson = DeployUtil.deployToJson(deploy)
   
-  // The wallet.sign() method signs a message, but for deploys we need to sign the deploy hash
-  // Try passing the deploy hash directly instead of the full JSON
-  const deployHashBytes = deploy.hash as Uint8Array
-  const deployHashHex = Array.from(deployHashBytes).map(b => b.toString(16).padStart(2, '0')).join('')
-  
-  console.log('Deploy hash to sign:', deployHashHex)
-  
   let signResult: any
   
-  // Try signDeploy first - it should return the full signed deploy
-  if (typeof wallet.signDeploy === 'function') {
-    console.log('Using wallet.signDeploy with JSON object')
-    try {
-      signResult = await wallet.signDeploy(deployJson, publicKey)
-      console.log('signDeploy result keys:', Object.keys(signResult || {}))
-    } catch (e: any) {
-      console.log('signDeploy failed:', e.message)
-      // Fall back to sign with deploy hash
-      signResult = await wallet.sign(deployHashHex, publicKey)
-    }
-  } else {
-    // Sign the deploy hash, not the full JSON
-    console.log('Using wallet.sign with deploy hash')
-    signResult = await wallet.sign(deployHashHex, publicKey)
+  // The Casper Wallet sign() method expects the deploy JSON
+  // Some wallets expect just deployJson.deploy, others expect the full object
+  console.log('Deploy JSON structure:', Object.keys(deployJson))
+  
+  // Try with the full deploy JSON first
+  const deployJsonStr = JSON.stringify(deployJson)
+  console.log('Signing deploy JSON (length):', deployJsonStr.length)
+  
+  try {
+    signResult = await wallet.sign(deployJsonStr, publicKey)
+  } catch (e: any) {
+    console.log('Full JSON failed, trying deploy.deploy:', e.message)
+    // Some wallets expect just the inner deploy object
+    const innerDeployStr = JSON.stringify((deployJson as any).deploy)
+    signResult = await wallet.sign(innerDeployStr, publicKey)
   }
   
   console.log('Sign result keys:', Object.keys(signResult || {}))
