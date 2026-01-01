@@ -424,10 +424,13 @@ function LandingPage({ setRole, chainStats, credentials }: { setRole:(r:Role)=>v
         </div>
       </main>
       <footer className="relative border-t border-zinc-800/50 py-6">
-        <div className="flex items-center justify-center gap-2 text-sm text-zinc-500">
-          <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"/>
-          <span>Powered by</span>
-          <span className="text-red-400 font-medium">Casper Network</span>
+        <div className="flex flex-col items-center gap-2 text-sm text-zinc-500">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"/>
+            <span>Powered by</span>
+            <span className="text-red-400 font-medium">Casper Network</span>
+          </div>
+          <p className="text-xs text-zinc-600 text-center max-w-md">Testnet demo only. Not for production use. Credentials are for demonstration purposes.</p>
         </div>
       </footer>
     </div>

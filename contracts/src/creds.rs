@@ -1,5 +1,11 @@
 #![cfg_attr(target_arch = "wasm32", no_std)]
 
+//! # CasperCreds Smart Contract
+//! 
+//! DISCLAIMER: This is a testnet demonstration contract.
+//! Not audited. Not for production use. Use at your own risk.
+//! Credentials issued are for demonstration purposes only.
+
 use odra::prelude::*;
 use odra::casper_types::U256;
 
