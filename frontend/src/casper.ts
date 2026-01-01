@@ -160,7 +160,7 @@ export async function issueCredential(
 
     const deployJson = DeployUtil.deployToJson(deploy)
     
-    // Try Casper Wallet extension (new API)
+    // Try Casper Wallet extension
     const CasperWalletProvider = (window as any).CasperWalletProvider
     if (CasperWalletProvider) {
       const wallet = CasperWalletProvider()
@@ -171,25 +171,37 @@ export async function issueCredential(
         await wallet.requestConnection()
       }
       
-      // New Casper Wallet API uses sign() with deploy JSON string
+      // Casper Wallet sign() returns signature, not signed deploy
+      // We need to apply the signature to the deploy ourselves
       const deployJsonStr = JSON.stringify(deployJson)
       const signResult = await wallet.sign(deployJsonStr, issuerPublicKey)
       
       if (signResult.cancelled) throw new Error('User cancelled signing')
       
-      // Parse the signed deploy
-      const signedDeployJson = typeof signResult.deploy === 'string' 
-        ? JSON.parse(signResult.deploy) 
-        : signResult.deploy
-        
-      if (!signedDeployJson) throw new Error('No signed deploy returned')
+      // The wallet returns a signature - we need to add it to the deploy
+      let signedDeploy: any
       
-      const signedDeployResult = DeployUtil.deployFromJson(signedDeployJson)
-      if (signedDeployResult.err) throw new Error('Failed to parse signed deploy')
+      if (signResult.signature) {
+        // Apply signature to original deploy
+        const sig = signResult.signature
+        signedDeploy = DeployUtil.setSignature(
+          deploy,
+          sig,
+          issuerKey
+        )
+      } else if (signResult.deploy) {
+        // Some wallet versions return the full signed deploy
+        const signedDeployJson = typeof signResult.deploy === 'string' 
+          ? JSON.parse(signResult.deploy) 
+          : signResult.deploy
+        const signedDeployResult = DeployUtil.deployFromJson(signedDeployJson)
+        if (signedDeployResult.err) throw new Error('Failed to parse signed deploy')
+        signedDeploy = signedDeployResult.val
+      } else {
+        throw new Error('Wallet returned no signature or deploy')
+      }
       
-      const signedDeploy = signedDeployResult.val
       const result = await casperClient.putDeploy(signedDeploy)
-      
       return { deployHash: result }
     }
     
@@ -226,7 +238,7 @@ export async function revokeCredential(
 
     const deployJson = DeployUtil.deployToJson(deploy)
     
-    // Try Casper Wallet extension (new API)
+    // Try Casper Wallet extension
     const CasperWalletProvider = (window as any).CasperWalletProvider
     if (CasperWalletProvider) {
       const wallet = CasperWalletProvider()
@@ -237,25 +249,27 @@ export async function revokeCredential(
         await wallet.requestConnection()
       }
       
-      // New Casper Wallet API uses sign() with deploy JSON string
       const deployJsonStr = JSON.stringify(deployJson)
       const signResult = await wallet.sign(deployJsonStr, issuerPublicKey)
       
       if (signResult.cancelled) throw new Error('User cancelled signing')
       
-      // Parse the signed deploy
-      const signedDeployJson = typeof signResult.deploy === 'string' 
-        ? JSON.parse(signResult.deploy) 
-        : signResult.deploy
-        
-      if (!signedDeployJson) throw new Error('No signed deploy returned')
+      let signedDeploy: any
       
-      const signedDeployResult = DeployUtil.deployFromJson(signedDeployJson)
-      if (signedDeployResult.err) throw new Error('Failed to parse signed deploy')
+      if (signResult.signature) {
+        signedDeploy = DeployUtil.setSignature(deploy, signResult.signature, issuerKey)
+      } else if (signResult.deploy) {
+        const signedDeployJson = typeof signResult.deploy === 'string' 
+          ? JSON.parse(signResult.deploy) 
+          : signResult.deploy
+        const signedDeployResult = DeployUtil.deployFromJson(signedDeployJson)
+        if (signedDeployResult.err) throw new Error('Failed to parse signed deploy')
+        signedDeploy = signedDeployResult.val
+      } else {
+        throw new Error('Wallet returned no signature or deploy')
+      }
       
-      const signedDeploy = signedDeployResult.val
       const result = await casperClient.putDeploy(signedDeploy)
-      
       return { deployHash: result }
     }
     
