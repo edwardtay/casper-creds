@@ -283,7 +283,7 @@ export default function App() {
       </header>
       {toast && <div className={`fixed top-20 right-6 px-5 py-3 rounded-xl text-sm shadow-2xl z-50 ${toast.t==='err'?'bg-red-950 border border-red-800':'bg-green-950 border border-green-800'}`}>{toast.m} <button onClick={()=>setToast(null)} className="ml-3">×</button></div>}
       <main className="relative max-w-7xl mx-auto px-6 py-8">
-        {role === 'issuer' && <IssuerPortal pubKey={pubKey} credentials={credentials} addCredential={addCredential} setToast={setToast}/>}
+        {role === 'issuer' && <IssuerPortal pubKey={pubKey} credentials={credentials} addCredential={addCredential} setToast={setToast} clickRef={clickRef}/>}
         {role === 'verifier' && <VerifierPortal credentials={credentials} setToast={setToast}/>}
         {role === 'holder' && <HolderPortal pubKey={pubKey} credentials={credentials} setToast={setToast}/>}
       </main>
@@ -439,7 +439,7 @@ function LandingPage({ setRole, chainStats, credentials }: { setRole:(r:Role)=>v
 }
 
 
-function IssuerPortal({ pubKey, credentials, addCredential, setToast }: { pubKey:string, credentials:Credential[], addCredential:(c:Credential)=>void, setToast:(t:any)=>void }) {
+function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }: { pubKey:string, credentials:Credential[], addCredential:(c:Credential)=>void, setToast:(t:any)=>void, clickRef:any }) {
   const [view, setView] = useState<'issue'|'batch'|'history'>('issue')
   const [form, setForm] = useState({ holder:'', type:'degree', title:'', institution:'', startDate:'', expires:'', holderName:'', description:'', grade:'', skills:'', licenseNumber:'', idNumber:'' })
   const [loading, setLoading] = useState(false)
@@ -760,7 +760,8 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast }: { pubKey
         form.type,
         form.title,
         expiresAt,
-        metadataHash
+        metadataHash,
+        clickRef
       )
       
       if (result) {

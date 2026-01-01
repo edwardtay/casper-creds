@@ -114,11 +114,30 @@ export async function getCredentialFromChain(credentialId: number): Promise<OnCh
 }
 
 
-// Helper to sign and submit deploy via Casper Wallet
-async function signAndSubmitDeploy(deploy: any, publicKey: string): Promise<string> {
+// Helper to sign and submit deploy via CSPR.click or Casper Wallet
+async function signAndSubmitDeploy(deploy: any, publicKey: string, clickRef?: any): Promise<string> {
+  const deployJson = DeployUtil.deployToJson(deploy)
+  
+  // Try CSPR.click SDK first (recommended for Casper)
+  if (clickRef && typeof clickRef.send === 'function') {
+    console.log('Using CSPR.click send()')
+    try {
+      const result = await clickRef.send(deployJson, publicKey)
+      console.log('CSPR.click result:', result)
+      if (result?.cancelled) throw new Error('User cancelled signing')
+      if (result?.deployHash) return result.deployHash
+      if (result?.deploy_hash) return result.deploy_hash
+      throw new Error('No deploy hash in CSPR.click response')
+    } catch (e: any) {
+      console.log('CSPR.click send failed:', e.message)
+      // Fall through to try Casper Wallet
+    }
+  }
+  
+  // Fallback to Casper Wallet extension
   const CasperWalletProvider = (window as any).CasperWalletProvider
   if (!CasperWalletProvider) {
-    throw new Error('Casper Wallet extension not found. Please install it from casper.network')
+    throw new Error('No wallet available. Please use CSPR.click or install Casper Wallet extension.')
   }
   
   const wallet = CasperWalletProvider()
@@ -127,26 +146,10 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string): Promise<stri
     await wallet.requestConnection()
   }
   
-  const deployJson = DeployUtil.deployToJson(deploy)
-  
-  let signResult: any
-  
-  // The Casper Wallet sign() method expects the deploy JSON
-  // Some wallets expect just deployJson.deploy, others expect the full object
-  console.log('Deploy JSON structure:', Object.keys(deployJson))
-  
-  // Try with the full deploy JSON first
+  // Try wallet.sign with deploy JSON
+  console.log('Using Casper Wallet sign()')
   const deployJsonStr = JSON.stringify(deployJson)
-  console.log('Signing deploy JSON (length):', deployJsonStr.length)
-  
-  try {
-    signResult = await wallet.sign(deployJsonStr, publicKey)
-  } catch (e: any) {
-    console.log('Full JSON failed, trying deploy.deploy:', e.message)
-    // Some wallets expect just the inner deploy object
-    const innerDeployStr = JSON.stringify((deployJson as any).deploy)
-    signResult = await wallet.sign(innerDeployStr, publicKey)
-  }
+  const signResult = await wallet.sign(deployJsonStr, publicKey)
   
   console.log('Sign result keys:', Object.keys(signResult || {}))
   
@@ -222,14 +225,15 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string): Promise<stri
   return deployHash
 }
 
-// Issue credential (requires Casper Wallet extension)
+// Issue credential (requires CSPR.click or Casper Wallet extension)
 export async function issueCredential(
   issuerPublicKey: string,
   holderPublicKey: string,
   credentialType: string,
   title: string,
   expiresAt: number,
-  metadataHash: string
+  metadataHash: string,
+  clickRef?: any
 ): Promise<{ deployHash: string } | null> {
   try {
     if (!CONTRACT_HASH) throw new Error('Contract not configured')
@@ -253,7 +257,7 @@ export async function issueCredential(
       '5000000000' // 5 CSPR gas
     )
 
-    const deployHash = await signAndSubmitDeploy(deploy, issuerPublicKey)
+    const deployHash = await signAndSubmitDeploy(deploy, issuerPublicKey, clickRef)
     return { deployHash }
   } catch (e: any) {
     console.error('Error issuing credential:', e)
@@ -261,11 +265,12 @@ export async function issueCredential(
   }
 }
 
-// Revoke credential (requires Casper Wallet extension)
+// Revoke credential (requires CSPR.click or Casper Wallet extension)
 export async function revokeCredential(
   issuerPublicKey: string,
   credentialId: number,
-  reason: string
+  reason: string,
+  clickRef?: any
 ): Promise<{ deployHash: string } | null> {
   try {
     if (!CONTRACT_HASH) throw new Error('Contract not configured')
@@ -285,7 +290,7 @@ export async function revokeCredential(
       '3000000000' // 3 CSPR gas
     )
 
-    const deployHash = await signAndSubmitDeploy(deploy, issuerPublicKey)
+    const deployHash = await signAndSubmitDeploy(deploy, issuerPublicKey, clickRef)
     return { deployHash }
   } catch (e: any) {
     console.error('Error revoking credential:', e)
