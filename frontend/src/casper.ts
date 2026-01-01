@@ -184,19 +184,68 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string, clickRef?: an
     await wallet.requestConnection()
   }
   
-  console.log('Using Casper Wallet sign()')
+  console.log('Using Casper Wallet')
   
-  // The wallet.sign() method signs arbitrary messages
-  // For deploys, we need to sign the deploy HASH, not the JSON
-  // Get the deploy hash (32 bytes)
-  const deployHashBytes = deploy.hash as Uint8Array
-  const deployHashHex = Array.from(deployHashBytes).map(b => b.toString(16).padStart(2, '0')).join('')
+  // Check available wallet methods
+  const walletMethods = Object.keys(wallet).filter(k => typeof wallet[k] === 'function')
+  console.log('Wallet methods:', walletMethods)
   
-  console.log('Deploy hash to sign:', deployHashHex)
-  console.log('Deploy hash length:', deployHashHex.length, 'chars =', deployHashHex.length / 2, 'bytes')
+  // The Casper Wallet expects deploy JSON for sign()
+  // It internally computes the hash and signs it
+  // But the signature verification is failing, which suggests the wallet
+  // might be signing the JSON string instead of the hash
   
-  // Sign the deploy hash (not the full JSON)
-  const signResult = await wallet.sign(deployHashHex, publicKey)
+  const deployJsonStr = JSON.stringify(deployJson)
+  
+  // Try signMessage for raw hash signing if available
+  if (typeof wallet.signMessage === 'function') {
+    console.log('Trying wallet.signMessage with deploy hash')
+    const deployHashBytes = deploy.hash as Uint8Array
+    const deployHashHex = Array.from(deployHashBytes).map(b => b.toString(16).padStart(2, '0')).join('')
+    try {
+      const signResult = await wallet.signMessage(deployHashHex, publicKey)
+      console.log('signMessage result:', signResult)
+      if (signResult && !signResult.cancelled && (signResult.signatureHex || signResult.signature)) {
+        // Process signature...
+        let sigHex = signResult.signatureHex || ''
+        if (!sigHex && signResult.signature) {
+          const sig = signResult.signature
+          if (typeof sig === 'string') {
+            sigHex = sig
+          } else if (Array.isArray(sig)) {
+            sigHex = sig.map((b: number) => b.toString(16).padStart(2, '0')).join('')
+          }
+        }
+        if (sigHex.startsWith('0x')) sigHex = sigHex.slice(2)
+        
+        // Add algorithm prefix
+        let fullSigHex = sigHex
+        if (sigHex.length === 128) {
+          const keyPrefix = publicKey.substring(0, 2)
+          fullSigHex = keyPrefix + sigHex
+        }
+        
+        // Add approval to deploy JSON
+        const signedDeployJson = JSON.parse(JSON.stringify(deployJson))
+        signedDeployJson.deploy.approvals = [{
+          signer: publicKey,
+          signature: fullSigHex
+        }]
+        
+        const deployResult = DeployUtil.deployFromJson(signedDeployJson)
+        if (!deployResult.err) {
+          const hash = await casperClient.putDeploy(deployResult.val)
+          return hash
+        }
+      }
+    } catch (e: any) {
+      console.log('signMessage failed:', e.message)
+    }
+  }
+  
+  // Fall back to sign() with deploy JSON
+  console.log('Using wallet.sign with deploy JSON')
+  const signResult = await wallet.sign(deployJsonStr, publicKey)
   
   console.log('Sign result keys:', Object.keys(signResult || {}))
   
