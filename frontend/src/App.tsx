@@ -243,7 +243,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-white font-sans">
       <div className="fixed inset-0 bg-gradient-to-br from-red-950/20 via-transparent to-purple-950/20 pointer-events-none"/>
-      <header className="relative border-b border-zinc-800/50 backdrop-blur-sm">
+      <header className="relative z-[200] border-b border-zinc-800/50 backdrop-blur-sm">
         <div className="px-6 h-16 flex items-center justify-between max-w-7xl mx-auto">
           <div className="flex items-center gap-4">
             <button onClick={()=>handleSetRole(null)} className="flex items-center gap-2 hover:opacity-80">
