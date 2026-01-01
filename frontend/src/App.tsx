@@ -262,7 +262,7 @@ export default function App() {
                   <span className="text-zinc-500 text-xs">▼</span>
                 </button>
                 {walletMenuOpen && (
-                  <div className="absolute right-0 top-full mt-2 w-48 bg-zinc-900 border border-zinc-700 rounded-xl shadow-xl z-50 overflow-hidden">
+                  <div className="absolute right-0 top-full mt-2 w-48 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl z-[100] overflow-hidden">
                     <button onClick={copyAddress} className="w-full px-4 py-3 text-left text-sm hover:bg-zinc-800 flex items-center gap-2">📋 Copy Address</button>
                     <button onClick={viewOnExplorer} className="w-full px-4 py-3 text-left text-sm hover:bg-zinc-800 flex items-center gap-2">🔗 View on Explorer</button>
                     <div className="border-t border-zinc-700"/>
@@ -815,7 +815,7 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }
 
   return (
     <div className="space-y-6">
-      <div className="flex gap-2">{[{id:'issue',l:'Issue Single',i:'📝'},{id:'batch',l:'Batch Issue',i:'📦'},{id:'history',l:'History',i:'📋'}].map(t=><button key={t.id} onClick={()=>setView(t.id as any)} className={`px-4 py-2 rounded-lg font-medium transition ${view===t.id?'bg-purple-600 text-white':'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}>{t.i} {t.l}</button>)}<div className="flex-1"/>{contractReady && <span className="text-xs text-green-400 self-center">⛓️ Chain</span>}{ipfsReady && <span className="text-xs text-blue-400 self-center ml-1">📦 IPFS</span>}<div className="text-sm text-zinc-500 self-center ml-2">{myIssued.length} issued</div></div>
+      <div className="flex gap-2">{[{id:'issue',l:'Issue Single',i:'📝'},{id:'batch',l:'Batch Issue',i:'📦'},{id:'history',l:'History',i:'📋'}].map(t=><button key={t.id} onClick={()=>setView(t.id as any)} className={`px-4 py-2 rounded-lg font-medium transition ${view===t.id?'bg-purple-600 text-white':'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}>{t.i} {t.l}</button>)}<div className="flex-1"/><div className="text-sm text-zinc-500 self-center">{myIssued.length} issued</div></div>
       {view === 'issue' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <form onSubmit={issue} className="lg:col-span-2 p-6 bg-zinc-900/50 rounded-2xl border border-zinc-800"><h3 className="text-lg font-semibold mb-6">Issue New Credential</h3>
