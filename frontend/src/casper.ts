@@ -127,15 +127,19 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string, clickRef?: an
     if (typeof clickRef.send === 'function') {
       console.log('Using CSPR.click send()')
       try {
-        // send() expects the deploy object, not JSON
-        const result = await clickRef.send(deploy, publicKey)
+        // send() expects the deploy JSON object and public key
+        // According to SDK types: send(transaction: string | object, signingPublicKey: string)
+        const result = await clickRef.send(deployJson, publicKey)
         console.log('CSPR.click send result:', result)
         if (result?.cancelled) throw new Error('User cancelled signing')
+        if (result?.error) throw new Error(result.error)
         if (result?.deployHash) return result.deployHash
-        if (result?.deploy_hash) return result.deploy_hash
-        if (typeof result === 'string') return result
+        if (result?.transactionHash) return result.transactionHash
       } catch (e: any) {
         console.log('CSPR.click send failed:', e.message)
+        // If user cancelled, throw immediately
+        if (e.message === 'User cancelled signing') throw e
+        // Otherwise continue to try other methods
       }
     }
     
@@ -143,14 +147,15 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string, clickRef?: an
     if (typeof clickRef.signAndSend === 'function') {
       console.log('Using CSPR.click signAndSend()')
       try {
-        const result = await clickRef.signAndSend(deploy, publicKey)
+        const result = await clickRef.signAndSend(deployJson, publicKey)
         console.log('signAndSend result:', result)
         if (result?.cancelled) throw new Error('User cancelled signing')
+        if (result?.error) throw new Error(result.error)
         if (result?.deployHash) return result.deployHash
-        if (result?.deploy_hash) return result.deploy_hash
-        if (typeof result === 'string') return result
+        if (result?.transactionHash) return result.transactionHash
       } catch (e: any) {
         console.log('signAndSend failed:', e.message)
+        if (e.message === 'User cancelled signing') throw e
       }
     }
     
@@ -158,9 +163,10 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string, clickRef?: an
     if (typeof clickRef.sign === 'function') {
       console.log('Using CSPR.click sign()')
       try {
-        const result = await clickRef.sign(deploy, publicKey)
+        const result = await clickRef.sign(deployJson, publicKey)
         console.log('CSPR.click sign result:', result)
         if (result?.cancelled) throw new Error('User cancelled signing')
+        if (result?.error) throw new Error(result.error)
         if (result?.deploy) {
           // Got signed deploy, submit it
           const signedDeploy = typeof result.deploy === 'string' ? JSON.parse(result.deploy) : result.deploy
@@ -173,6 +179,7 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string, clickRef?: an
         if (result?.deployHash) return result.deployHash
       } catch (e: any) {
         console.log('CSPR.click sign failed:', e.message)
+        if (e.message === 'User cancelled signing') throw e
       }
     }
     
@@ -180,9 +187,10 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string, clickRef?: an
     if (typeof clickRef.signDeploy === 'function') {
       console.log('Using CSPR.click signDeploy()')
       try {
-        const result = await clickRef.signDeploy(deploy, publicKey)
+        const result = await clickRef.signDeploy(deployJson, publicKey)
         console.log('signDeploy result:', result)
         if (result?.cancelled) throw new Error('User cancelled signing')
+        if (result?.error) throw new Error(result.error)
         if (result?.deploy) {
           const signedDeployJson = typeof result.deploy === 'string' ? JSON.parse(result.deploy) : result.deploy
           const deployResult = DeployUtil.deployFromJson(signedDeployJson)
@@ -194,8 +202,14 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string, clickRef?: an
         if (result?.deployHash) return result.deployHash
       } catch (e: any) {
         console.log('signDeploy failed:', e.message)
+        if (e.message === 'User cancelled signing') throw e
       }
     }
+  }
+  
+  // If CSPR.click was available but all methods failed, throw error
+  if (clickRef) {
+    throw new Error('CSPR.click signing failed. Please try reconnecting your wallet.')
   }
   
   // Try Casper Signer (legacy extension) first - it properly signs deploys
