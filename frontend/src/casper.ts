@@ -133,8 +133,6 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string): Promise<stri
   
   if (signResult.cancelled) throw new Error('User cancelled signing')
   
-  // The wallet should return a signedDeploy in the response
-  // Try different response formats
   let signedDeploy: any
   
   if (signResult.deploy) {
@@ -146,19 +144,20 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string): Promise<stri
     if (result.err) throw new Error('Failed to parse signed deploy')
     signedDeploy = result.val
   } else if (signResult.signature) {
-    // Wallet returned just signature - need to construct signed deploy manually
-    // The signature includes the algorithm prefix (01 for ed25519, 02 for secp256k1)
-    const sigHex = signResult.signature.startsWith('0x') 
-      ? signResult.signature.slice(2) 
-      : signResult.signature
+    // Wallet returned just signature - convert to hex string if needed
+    let sigHex: string
+    const sig = signResult.signature
+    if (typeof sig === 'string') {
+      sigHex = sig.startsWith('0x') ? sig.slice(2) : sig
+    } else if (sig instanceof Uint8Array) {
+      sigHex = Array.from(sig).map((b: number) => b.toString(16).padStart(2, '0')).join('')
+    } else if (Array.isArray(sig)) {
+      sigHex = sig.map((b: number) => b.toString(16).padStart(2, '0')).join('')
+    } else {
+      throw new Error('Unknown signature format')
+    }
     
-    // Create approval and add to deploy
-    const signerKey = CLPublicKey.fromHex(publicKey)
-    const approval = new DeployUtil.Approval()
-    approval.signer = signerKey.toAccountHashStr()
-    approval.signature = sigHex
-    
-    // Clone deploy with approval
+    // Clone deploy and add approval
     signedDeploy = DeployUtil.deployFromJson(deployJson).val
     signedDeploy.approvals = [{ signer: publicKey, signature: sigHex }]
   } else {
