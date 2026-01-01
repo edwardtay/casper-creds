@@ -19,22 +19,20 @@ const contractClient = new Contracts.Contract(casperClient)
 
 // Set contract hash if available
 if (CONTRACT_HASH) {
-  // Support both hash- and contract- prefixes, or raw hex
-  // IF the user provided a package hash but we need a contract hash, this might fail,
-  // but usually users copy the string from cspr.live which might include the prefix.
-  let cleanHash = CONTRACT_HASH;
-  if (cleanHash.startsWith('contract-package-')) {
-    // If it's a package hash, we usually can't call it directly as a 'Contract' without version
-    // But often users paste the Contract Hash with the wrong prefix? 
-    // Let's assume for now they pasted the Contract Hash but with package prefix, OR 
-    // we convert it to hash- format which SDK expects for simple calls.
-    cleanHash = cleanHash.replace('contract-package-', 'hash-')
-  } else if (cleanHash.startsWith('contract-')) {
-    cleanHash = cleanHash.replace('contract-', 'hash-')
-  } else if (!cleanHash.startsWith('hash-')) {
-    cleanHash = 'hash-' + cleanHash
+  // If it's a package hash, use setContractPackageHash
+  // This ensures the SDK uses StoredVersionedContractByHash
+  if (CONTRACT_HASH.startsWith('contract-package-')) {
+    console.log('Configuring as Contract Package:', CONTRACT_HASH)
+    contractClient.setContractPackageHash(CONTRACT_HASH)
+  } else {
+    // Standard contract hash
+    let cleanHash = CONTRACT_HASH
+    if (cleanHash.startsWith('contract-')) cleanHash = cleanHash.replace('contract-', 'hash-')
+    else if (!cleanHash.startsWith('hash-')) cleanHash = 'hash-' + cleanHash
+
+    console.log('Configuring as Contract Hash:', cleanHash)
+    contractClient.setContractHash(cleanHash)
   }
-  contractClient.setContractHash(cleanHash)
 }
 
 export interface OnChainCredential {
