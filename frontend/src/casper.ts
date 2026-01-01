@@ -162,10 +162,13 @@ export async function issueCredential(
 
     const deployJson = DeployUtil.deployToJson(deploy)
     
+    // Try to get CSPR.click SDK - check multiple sources
+    const sdk = clickRef || (window as any).csprclick
+    
     // Try CSPR.click SDK if available
-    if (clickRef && typeof clickRef.send === 'function') {
+    if (sdk && typeof sdk.send === 'function') {
       try {
-        const result = await clickRef.send(deployJson, issuerPublicKey)
+        const result = await sdk.send(deployJson, issuerPublicKey)
         if (result?.cancelled) throw new Error('User cancelled signing')
         if (result?.error) throw new Error(result.error)
         if (result?.deployHash) return { deployHash: result.deployHash }
@@ -173,14 +176,15 @@ export async function issueCredential(
         throw new Error('No transaction hash returned from CSPR.click')
       } catch (e: any) {
         console.error('CSPR.click send failed:', e.message)
-        // Don't fallback - if user is using CSPR.click, they don't have Casper Wallet
         throw e
       }
     }
     
     // Fallback to direct Casper Wallet extension
     const wallet = (window as any).CasperWalletProvider?.()
-    if (!wallet) throw new Error('No wallet available. Install Casper Wallet browser extension.')
+    if (!wallet) {
+      throw new Error('Wallet not available. Please install Casper Wallet extension or reconnect via CSPR.click.')
+    }
     
     const signResult = await wallet.signDeploy(deployJson, issuerPublicKey)
     
@@ -228,10 +232,13 @@ export async function revokeCredential(
 
     const deployJson = DeployUtil.deployToJson(deploy)
     
+    // Try to get CSPR.click SDK - check multiple sources
+    const sdk = clickRef || (window as any).csprclick
+    
     // Try CSPR.click SDK if available
-    if (clickRef && typeof clickRef.send === 'function') {
+    if (sdk && typeof sdk.send === 'function') {
       try {
-        const result = await clickRef.send(deployJson, issuerPublicKey)
+        const result = await sdk.send(deployJson, issuerPublicKey)
         if (result?.cancelled) throw new Error('User cancelled signing')
         if (result?.error) throw new Error(result.error)
         if (result?.deployHash) return { deployHash: result.deployHash }
@@ -245,7 +252,9 @@ export async function revokeCredential(
     
     // Fallback to direct Casper Wallet extension
     const wallet = (window as any).CasperWalletProvider?.()
-    if (!wallet) throw new Error('No wallet available. Install Casper Wallet browser extension.')
+    if (!wallet) {
+      throw new Error('Wallet not available. Please install Casper Wallet extension or reconnect via CSPR.click.')
+    }
     
     const signResult = await wallet.signDeploy(deployJson, issuerPublicKey)
     
