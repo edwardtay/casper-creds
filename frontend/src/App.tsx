@@ -314,7 +314,7 @@ function LandingPage({ setRole, chainStats, credentials }: { setRole:(r:Role)=>v
       <main className="relative max-w-7xl mx-auto px-6 py-8 flex-1">
         <div className="text-center mb-6 px-2">
           <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold mb-4 sm:mb-6 bg-gradient-to-r from-white via-zinc-200 to-zinc-400 bg-clip-text text-transparent leading-tight">Verifiable Credentials<br/>for the Real World</h1>
-          <p className="text-lg sm:text-xl text-zinc-400 max-w-2xl mx-auto">Issue, verify, and manage credentials on blockchain. Degrees, licenses, certifications — cryptographically secured with AI fraud detection.</p>
+          <p className="text-lg sm:text-xl text-zinc-400 max-w-2xl mx-auto">Issue, verify, and manage credentials on blockchain. Degrees, licenses, certifications — cryptographically secured and tamper-proof.</p>
         </div>
         <div className="mb-10 p-5 bg-zinc-900/50 rounded-2xl border border-zinc-800">
           <div className="flex items-center gap-2 mb-4"><span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"/><span className="text-sm font-medium text-green-400">Live Network Status</span><span className="text-xs text-zinc-600 ml-auto">casper-test</span></div>
@@ -337,7 +337,7 @@ function LandingPage({ setRole, chainStats, credentials }: { setRole:(r:Role)=>v
             <button onClick={()=>setRole('verifier')} className="group p-6 bg-gradient-to-br from-blue-950/50 to-zinc-900 rounded-2xl border border-blue-800/30 hover:border-blue-500/50 transition text-left hover:scale-[1.02]">
               <div className="w-14 h-14 bg-blue-500/20 rounded-2xl flex items-center justify-center text-2xl mb-4 group-hover:scale-110 transition">🔍</div>
               <h3 className="text-xl font-bold mb-2">Verifier</h3><p className="text-zinc-400 text-sm mb-3">Employers, institutions, anyone verifying credentials.</p>
-              <ul className="text-xs text-zinc-500 space-y-1 mb-3"><li>• Instant blockchain verification</li><li>• AI fraud detection</li><li>• No wallet required</li></ul>
+              <ul className="text-xs text-zinc-500 space-y-1 mb-3"><li>• Instant blockchain verification</li><li>• Cryptographic proof</li><li>• No wallet required</li></ul>
               <div className="text-blue-400 text-sm font-medium group-hover:translate-x-1 transition">Enter Portal →</div>
             </button>
             <button onClick={()=>setRole('holder')} className="group p-6 bg-gradient-to-br from-green-950/50 to-zinc-900 rounded-2xl border border-green-800/30 hover:border-green-500/50 transition text-left hover:scale-[1.02]">
@@ -350,7 +350,7 @@ function LandingPage({ setRole, chainStats, credentials }: { setRole:(r:Role)=>v
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-10">
           <div className="p-5 bg-red-950/30 rounded-2xl border border-red-900/30"><h3 className="text-lg font-semibold text-red-400 mb-3">❌ The $600B Problem</h3><ul className="space-y-2 text-sm text-zinc-400"><li>• <strong className="text-white">40%</strong> of resumes contain falsified credentials</li><li>• Manual verification takes <strong className="text-white">days to weeks</strong></li><li>• Centralized databases are <strong className="text-white">hackable</strong></li></ul></div>
-          <div className="p-5 bg-green-950/30 rounded-2xl border border-green-900/30"><h3 className="text-lg font-semibold text-green-400 mb-3">✓ Our Solution</h3><ul className="space-y-2 text-sm text-zinc-400"><li>• <strong className="text-white">Instant</strong> blockchain verification</li><li>• <strong className="text-white">Immutable</strong> credential records</li><li>• <strong className="text-white">AI-powered</strong> fraud detection</li></ul></div>
+          <div className="p-5 bg-green-950/30 rounded-2xl border border-green-900/30"><h3 className="text-lg font-semibold text-green-400 mb-3">✓ Our Solution</h3><ul className="space-y-2 text-sm text-zinc-400"><li>• <strong className="text-white">Instant</strong> blockchain verification</li><li>• <strong className="text-white">Immutable</strong> credential records</li><li>• <strong className="text-white">Cryptographic</strong> signatures</li></ul></div>
         </div>
         
         {/* How it Works */}
@@ -377,9 +377,9 @@ function LandingPage({ setRole, chainStats, credentials }: { setRole:(r:Role)=>v
             </div>
             <div className="relative p-5 bg-zinc-900/50 rounded-2xl border border-zinc-800">
               <div className="absolute -top-3 -left-3 w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center text-sm font-bold">4</div>
-              <div className="text-2xl mb-3">🤖</div>
-              <h4 className="font-semibold mb-2">AI Fraud Check</h4>
-              <p className="text-xs text-zinc-400">HuggingFace NLP analyzes claims for suspicious patterns</p>
+              <div className="text-2xl mb-3">📤</div>
+              <h4 className="font-semibold mb-2">Share & Export</h4>
+              <p className="text-xs text-zinc-400">Share via QR code, link, or export as PDF certificate</p>
             </div>
           </div>
         </div>
@@ -419,7 +419,7 @@ function LandingPage({ setRole, chainStats, credentials }: { setRole:(r:Role)=>v
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="p-4 bg-zinc-800/50 rounded-xl"><div className="text-2xl mb-2">🔑</div><div className="font-medium text-sm">Ed25519 Signatures</div><div className="text-xs text-zinc-500">Cryptographic proof</div></div>
             <div className="p-4 bg-zinc-800/50 rounded-xl"><div className="text-2xl mb-2">⛓️</div><div className="font-medium text-sm">Immutable Ledger</div><div className="text-xs text-zinc-500">Tamper-proof records</div></div>
-            <div className="p-4 bg-zinc-800/50 rounded-xl"><div className="text-2xl mb-2">🤖</div><div className="font-medium text-sm">AI Fraud Detection</div><div className="text-xs text-zinc-500">HuggingFace NLP</div></div>
+            <div className="p-4 bg-zinc-800/50 rounded-xl"><div className="text-2xl mb-2">📦</div><div className="font-medium text-sm">IPFS Storage</div><div className="text-xs text-zinc-500">Decentralized metadata</div></div>
             <div className="p-4 bg-zinc-800/50 rounded-xl"><div className="text-2xl mb-2">🛡️</div><div className="font-medium text-sm">Access Control</div><div className="text-xs text-zinc-500">Role-based permissions</div></div>
           </div>
         </div>
@@ -966,12 +966,9 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }
 
 
 function VerifierPortal({ credentials, setToast }: { credentials:Credential[], setToast:(t:any)=>void }) {
-  const [view, setView] = useState<'verify'|'ai'>('verify')
   const [id, setId] = useState('')
   const [result, setResult] = useState<Credential|null>(null)
   const [loading, setLoading] = useState(false)
-  const [aiInput, setAiInput] = useState('')
-  const [aiResult, setAiResult] = useState<any>(null)
   const certRef = useRef<HTMLDivElement>(null)
   const contractReady = isContractConfigured()
 
@@ -1023,34 +1020,14 @@ function VerifierPortal({ credentials, setToast }: { credentials:Credential[], s
     setLoading(false)
   }
 
-  const analyzeAI = async (e: React.FormEvent) => {
-    e.preventDefault(); if (aiInput.length < 10) return setToast({t:'err', m:'Enter more text'}); setLoading(true); setAiResult(null)
-    const flags: string[] = []; let risk = 0; const lower = aiInput.toLowerCase()
-    if (['harvard','mit','stanford','yale','oxford'].some(i=>lower.includes(i))) { flags.push('Claims elite institution — verify with registrar'); risk += 25 }
-    if (lower.includes('phd') && !aiInput.match(/20\d{2}/)) { flags.push('PhD without graduation year'); risk += 30 }
-    const year = aiInput.match(/20\d{2}/); if (year && parseInt(year[0]) > new Date().getFullYear()) { flags.push(`Future date (${year[0]})`); risk += 45 }
-    if ((lower.includes('certified') || lower.includes('license')) && !lower.match(/[a-z0-9]{6,}/i)) { flags.push('Missing credential ID'); risk += 20 }
-    try { const hfToken = import.meta.env.VITE_HUGGINGFACE_API_KEY; const res = await fetch('https://api-inference.huggingface.co/models/facebook/bart-large-mnli', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(hfToken && { 'Authorization': `Bearer ${hfToken}` }) }, body: JSON.stringify({ inputs: aiInput, parameters: { candidate_labels: ['legitimate', 'suspicious', 'fraudulent'] } }) }); if (res.ok) { const data = await res.json(); if (data.labels?.[0] !== 'legitimate') { flags.push(`AI: ${data.labels[0]} (${(data.scores[0]*100).toFixed(0)}%)`); risk += 15 } } } catch {}
-    setAiResult({ risk: Math.min(risk, 100), flags }); setLoading(false)
-  }
-
   const exportPDF = async () => { if (!certRef.current || !result) return; const canvas = await html2canvas(certRef.current, { backgroundColor: '#0a0a0f' }); const pdf = new jsPDF('l', 'mm', 'a4'); pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 10, 10, 277, 150); pdf.save(`credential-${result.id}.pdf`) }
 
   return (
     <div className="space-y-6">
-      <div className="flex gap-2">{[{id:'verify',l:'Verify',i:'✓'},{id:'ai',l:'AI Fraud Check',i:'🤖'}].map(t=><button key={t.id} onClick={()=>setView(t.id as any)} className={`px-4 py-2 rounded-lg font-medium transition ${view===t.id?'bg-blue-600 text-white':'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}>{t.i} {t.l}</button>)}</div>
-      {view === 'verify' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div><form onSubmit={verify} className="p-6 bg-zinc-900/50 rounded-2xl border border-zinc-800"><h3 className="text-lg font-semibold mb-6">Verify Credential</h3><div className="space-y-4"><div><label className="block text-sm text-zinc-400 mb-2">Credential ID</label><input value={id} onChange={e=>setId(e.target.value)} placeholder="CRED-XXXXXX-XXXX" className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700 font-mono" required/></div><button disabled={loading} className="w-full py-3 bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl font-medium disabled:opacity-50">{loading ? 'Verifying...' : '✓ Verify'}</button></div></form><div className="mt-4 p-4 bg-zinc-900/30 rounded-xl border border-zinc-800"><div className="text-sm text-zinc-400 mb-2">Try sample credentials:</div><div className="flex flex-wrap gap-2">{SAMPLE_CREDENTIALS.map(c=><button key={c.id} onClick={()=>setId(c.id)} className="px-2 py-1 bg-zinc-800 hover:bg-zinc-700 rounded text-xs font-mono">{c.type}</button>)}</div></div>{credentials.length > 0 && (<div className="mt-4 p-4 bg-zinc-900/30 rounded-xl border border-zinc-800"><div className="text-sm text-zinc-400 mb-2">Your credentials:</div><div className="flex flex-wrap gap-2">{credentials.slice(-5).map(c=><button key={c.id} onClick={()=>setId(c.id)} className="px-2 py-1 bg-zinc-800 hover:bg-zinc-700 rounded text-xs font-mono">{c.id}</button>)}</div></div>)}</div>
           <div>{result ? (<div ref={certRef} className={`p-6 rounded-2xl border ${!result.revoked?'bg-green-950/30 border-green-800/50':'bg-red-950/30 border-red-800/50'}`}><div className="flex items-center justify-between mb-6"><div className="flex items-center gap-4"><div className={`w-14 h-14 rounded-xl flex items-center justify-center text-2xl ${!result.revoked?'bg-green-500/20':'bg-red-500/20'}`}>{!result.revoked?'✓':'✗'}</div><div><div className="text-xl font-bold">{!result.revoked?'Valid':'Revoked'}</div><div className="text-sm text-zinc-400">Verified on Casper</div></div></div><QRCodeSVG value={`${window.location.origin}?id=${result.id}`} size={70} bgColor="transparent" fgColor="#fff"/></div><div className="grid grid-cols-2 gap-3 mb-4"><div className="p-3 bg-zinc-900/50 rounded-lg"><div className="text-xs text-zinc-500">Title</div><div className="font-medium text-sm">{result.title}</div></div><div className="p-3 bg-zinc-900/50 rounded-lg"><div className="text-xs text-zinc-500">Institution</div><div className="font-medium text-sm">{result.institution}</div></div><div className="p-3 bg-zinc-900/50 rounded-lg"><div className="text-xs text-zinc-500">Type</div><div className="font-medium text-sm capitalize">{result.type}</div></div><div className="p-3 bg-zinc-900/50 rounded-lg"><div className="text-xs text-zinc-500">Issued</div><div className="font-medium text-sm">{new Date(result.issuedAt).toLocaleDateString()}</div></div></div><div className="p-3 bg-zinc-900/50 rounded-lg mb-3"><div className="text-xs text-zinc-500">Credential ID</div><code className="text-sm">{result.id}</code></div>{result.txHash && <div className="p-3 bg-zinc-900/50 rounded-lg mb-3"><div className="text-xs text-zinc-500">Transaction Hash ↗</div><a href={`https://testnet.cspr.live/deploy/${result.txHash}`} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-400 hover:text-blue-300 font-mono break-all">{result.txHash}</a></div>}{result.signature && <div className="p-3 bg-zinc-900/50 rounded-lg mb-4"><div className="text-xs text-zinc-500">Signature</div><code className="text-xs text-zinc-400 break-all">{result.signature}</code></div>}<div className="flex gap-3"><button onClick={exportPDF} className="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm">📄 Export PDF</button><button onClick={()=>{navigator.clipboard.writeText(result.id);setToast({t:'ok',m:'Copied'})}} className="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm">📋 Copy ID</button></div></div>) : (<div className="h-full min-h-[300px] flex items-center justify-center bg-zinc-900/30 rounded-2xl border border-dashed border-zinc-800"><div className="text-center text-zinc-500"><div className="text-5xl mb-4">🔍</div><div>Enter credential ID to verify</div></div></div>)}</div>
         </div>
-      )}
-      {view === 'ai' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <form onSubmit={analyzeAI} className="p-6 bg-zinc-900/50 rounded-2xl border border-zinc-800"><div className="flex items-center gap-3 mb-6"><div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center">🤖</div><div><h3 className="text-lg font-semibold">AI Fraud Detection</h3><div className="text-xs text-zinc-500">Powered by HuggingFace</div></div></div><textarea value={aiInput} onChange={e=>setAiInput(e.target.value)} rows={8} placeholder="Paste credential claim, resume text, or certificate details..." className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700 mb-4"/><button disabled={loading} className="w-full py-3 bg-gradient-to-r from-purple-600 to-pink-600 rounded-xl font-medium disabled:opacity-50">{loading ? 'Analyzing...' : '🔍 Analyze'}</button></form>
-          <div>{aiResult ? (<div className="p-6 bg-zinc-900/50 rounded-2xl border border-zinc-800"><div className="flex items-center justify-between mb-4"><h3 className="text-lg font-semibold">Analysis</h3><span className={`px-4 py-2 rounded-xl font-bold ${aiResult.risk<30?'bg-green-500/20 text-green-400':aiResult.risk<60?'bg-yellow-500/20 text-yellow-400':'bg-red-500/20 text-red-400'}`}>Risk: {aiResult.risk}/100</span></div><div className="h-3 bg-zinc-800 rounded-full overflow-hidden mb-6"><div className={`h-full ${aiResult.risk<30?'bg-green-500':aiResult.risk<60?'bg-yellow-500':'bg-red-500'}`} style={{width:`${aiResult.risk}%`}}/></div>{aiResult.flags.length > 0 ? (<div className="p-4 bg-red-950/30 rounded-xl border border-red-800/50"><div className="font-medium text-red-400 mb-2">⚠️ Red Flags</div><ul className="space-y-1 text-sm">{aiResult.flags.map((f:string,i:number)=><li key={i}>• {f}</li>)}</ul></div>) : <div className="p-4 bg-green-950/30 rounded-xl border border-green-800/50"><div className="font-medium text-green-400">✓ No red flags detected</div></div>}</div>) : (<div className="h-full min-h-[350px] flex items-center justify-center bg-zinc-900/30 rounded-2xl border border-dashed border-zinc-800"><div className="text-center text-zinc-500"><div className="text-5xl mb-4">🤖</div><div>Paste text to analyze</div></div></div>)}</div>
-        </div>
-      )}
     </div>
   )
 }
