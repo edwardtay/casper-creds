@@ -185,8 +185,18 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string, clickRef?: an
   }
   
   console.log('Using Casper Wallet sign()')
-  const deployJsonStr = JSON.stringify(deployJson)
-  const signResult = await wallet.sign(deployJsonStr, publicKey)
+  
+  // The wallet.sign() method signs arbitrary messages
+  // For deploys, we need to sign the deploy HASH, not the JSON
+  // Get the deploy hash (32 bytes)
+  const deployHashBytes = deploy.hash as Uint8Array
+  const deployHashHex = Array.from(deployHashBytes).map(b => b.toString(16).padStart(2, '0')).join('')
+  
+  console.log('Deploy hash to sign:', deployHashHex)
+  console.log('Deploy hash length:', deployHashHex.length, 'chars =', deployHashHex.length / 2, 'bytes')
+  
+  // Sign the deploy hash (not the full JSON)
+  const signResult = await wallet.sign(deployHashHex, publicKey)
   
   console.log('Sign result keys:', Object.keys(signResult || {}))
   
