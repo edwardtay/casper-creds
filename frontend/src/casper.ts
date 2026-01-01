@@ -394,7 +394,6 @@ export async function issueCredential(
     // Detect if we are calling a Contract Package (Versioned) or direct Contract
     // Resilience: Check for prefix OR known package hash start (in case env var is stripped)
     const isPackage = CONTRACT_HASH.includes('contract-package-') || CONTRACT_HASH.startsWith('fc4506');
-    console.log(`DEBUG: Detected as package? ${isPackage}`)
 
     // Helper for browser-safe hex conversion
     const hexToBytes = (hex: string) => {
@@ -408,7 +407,6 @@ export async function issueCredential(
     if (isPackage) {
       // Remove prefix if present, otherwise assume it's already raw hex
       const packageHashHex = CONTRACT_HASH.replace('contract-package-', '')
-      console.log('Constructing Versioned Call for Package:', packageHashHex)
 
       // Use browser-safe conversion
       const packageHash = hexToBytes(packageHashHex)
@@ -422,7 +420,6 @@ export async function issueCredential(
       )
     } else {
       const contractHashHex = CONTRACT_HASH.replace('hash-', '').replace('contract-', '')
-      console.log('Constructing Direct Call for Contract:', contractHashHex)
 
       const contractHash = hexToBytes(contractHashHex)
 
