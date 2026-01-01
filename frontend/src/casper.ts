@@ -131,6 +131,11 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string): Promise<stri
   const deployJsonStr = JSON.stringify(deployJson)
   const signResult = await wallet.sign(deployJsonStr, publicKey)
   
+  // Debug: log what wallet returns
+  console.log('Wallet sign result keys:', Object.keys(signResult))
+  console.log('signResult.deploy:', signResult.deploy ? 'present' : 'absent')
+  console.log('signResult.signature:', signResult.signature ? typeof signResult.signature : 'absent')
+  
   if (signResult.cancelled) throw new Error('User cancelled signing')
   
   let signedDeploy: any
@@ -154,8 +159,10 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string): Promise<stri
     } else if (Array.isArray(sig)) {
       sigHex = sig.map((b: number) => b.toString(16).padStart(2, '0')).join('')
     } else {
-      throw new Error('Unknown signature format')
+      throw new Error('Unknown signature format: ' + typeof sig)
     }
+    
+    console.log('Signature hex length:', sigHex.length)
     
     // Reconstruct deploy from JSON and add approval in correct format
     const deployResult = DeployUtil.deployFromJson(deployJson)
@@ -167,7 +174,7 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string): Promise<stri
     const sigBytes = Uint8Array.from(sigHex.match(/.{2}/g)!.map(byte => parseInt(byte, 16)))
     signedDeploy = DeployUtil.setSignature(signedDeploy, sigBytes, signerKey)
   } else {
-    throw new Error('Wallet returned no signature or deploy')
+    throw new Error('Wallet returned no signature or deploy. Keys: ' + Object.keys(signResult).join(', '))
   }
   
   const deployHash = await casperClient.putDeploy(signedDeploy)
