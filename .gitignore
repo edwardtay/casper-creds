@@ -5,13 +5,18 @@ frontend/node_modules/
 # Build outputs
 dist/
 build/
-*.wasm
 
-# Environment
+# Environment (use Vercel dashboard for production env vars)
 .env
 .env.local
+frontend/.env
+frontend/.env.local
+contracts/.env
+
+# Secrets - NEVER commit these
 *.pem
 secret_key.pem
+Account*.pem
 
 # IDE
 .idea/
@@ -31,6 +36,5 @@ npm-debug.log*
 .cache/
 .parcel-cache/
 
-# Rust
-target/
-Cargo.lock
+# Rust build artifacts
+contracts/target/

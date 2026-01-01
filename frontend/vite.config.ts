@@ -11,4 +11,16 @@ export default defineConfig({
       buffer: 'buffer',
     },
   },
+  server: {
+    proxy: {
+      '/casper-rpc': {
+        target: 'https://node.testnet.casper.network',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/casper-rpc/, '/rpc'),
+        secure: true,
+      },
+    },
+  },
+  // Handle SPA routing - serve index.html for all routes
+  appType: 'spa',
 })

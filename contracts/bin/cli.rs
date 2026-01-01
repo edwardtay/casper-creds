@@ -63,6 +63,45 @@ impl ScenarioMetadata for RegisterIssuerScenario {
     const DESCRIPTION: &'static str = "Register a new credential issuer (owner only)";
 }
 
+/// Scenario to issue a credential
+pub struct IssueScenario;
+
+impl Scenario for IssueScenario {
+    fn args(&self) -> Vec<CommandArg> {
+        vec![
+            CommandArg::new("holder", "Holder account hash", NamedCLType::Key),
+            CommandArg::new("cred-type", "Credential type (degree, certificate, license, employment, identity)", NamedCLType::String),
+            CommandArg::new("title", "Credential title", NamedCLType::String),
+            CommandArg::new("expires", "Expiration timestamp (0 for never)", NamedCLType::U64),
+            CommandArg::new("metadata", "IPFS metadata hash", NamedCLType::String),
+        ]
+    }
+
+    fn run(
+        &self,
+        env: &HostEnv,
+        container: &DeployedContractsContainer,
+        args: Args
+    ) -> Result<(), Error> {
+        let mut contract = container.contract_ref::<CasperCreds>(env)?;
+        let holder = args.get_single::<Address>("holder")?;
+        let cred_type = args.get_single::<String>("cred-type")?;
+        let title = args.get_single::<String>("title")?;
+        let expires = args.get_single::<u64>("expires")?;
+        let metadata = args.get_single::<String>("metadata")?;
+        
+        env.set_gas(50_000_000_000);
+        let id = contract.try_issue(holder, cred_type, title, expires, metadata)?;
+        println!("Credential issued with ID: {}", id);
+        Ok(())
+    }
+}
+
+impl ScenarioMetadata for IssueScenario {
+    const NAME: &'static str = "issue";
+    const DESCRIPTION: &'static str = "Issue a new credential";
+}
+
 /// Scenario to get total credentials count
 pub struct TotalScenario;
 
@@ -95,6 +134,7 @@ pub fn main() {
         .deploy(CasperCredsDeployScript)
         .contract::<CasperCreds>()
         .scenario(RegisterIssuerScenario)
+        .scenario(IssueScenario)
         .scenario(TotalScenario)
         .build()
         .run();

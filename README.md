@@ -1,101 +1,131 @@
 # CasperCreds 🎓
 
-**Verifiable Credentials for the Real World** — Powered by Casper Blockchain
+**Verifiable Credentials on Casper Blockchain** — Issue, verify, and manage tamper-proof credentials with AI fraud detection.
 
-> Degrees, licenses, certifications, employment records, KYC — any credential that matters, secured with tamper-proof verification and AI-powered fraud detection.
-
-![License](https://img.shields.io/badge/license-MIT-blue)
-![Rust](https://img.shields.io/badge/Rust-Odra%20Framework-orange)
-![React](https://img.shields.io/badge/React-TypeScript-blue)
+[![Casper Network](https://img.shields.io/badge/Casper-Testnet-red)](https://testnet.cspr.live)
+[![Contract](https://img.shields.io/badge/Contract-Live-green)](https://testnet.cspr.live/contract-package/fc4506f2d996605cbb8d4e06158b8d4320433e2dde4dc766f65115911ac98973)
+[![Odra Framework](https://img.shields.io/badge/Odra-v2.4.0-orange)](https://odra.dev)
 
 ---
 
-## 🚨 The Problem
+## 🚀 Live Demo
 
-Credential fraud is a **$600+ billion global problem**:
+**Contract:** [`fc4506f2...`](https://testnet.cspr.live/contract-package/fc4506f2d996605cbb8d4e06158b8d4320433e2dde4dc766f65115911ac98973) on Casper Testnet
 
-| Issue | Impact |
-|-------|--------|
-| **40% of resumes** contain falsified credentials | Unqualified hires, safety risks |
-| **Manual verification** takes days to weeks | Lost productivity, delayed hiring |
-| **Centralized databases** are hackable | Data breaches, record tampering |
-| **Paper credentials** are easily forged | Diploma mills, fake certifications |
-| **Cross-border verification** is nearly impossible | Global workforce challenges |
+### Live Credentials (On-Chain)
 
-**Real consequences:**
-- Unqualified doctors practicing medicine
-- Fake engineers signing off on building safety
-- Fraudulent financial advisors managing retirement funds
+| ID | Type | Title | Transaction |
+|----|------|-------|-------------|
+| 0 | 🎓 Degree | Bachelor of Science in Computer Science | [View TX](https://testnet.cspr.live/transaction/60145ce6a20b058fd7f69060192929fa32ad9519a6b2f64821216ebd1b932127) |
+| 1 | 📜 Certificate | Cloud Practitioner Certification | [View TX](https://testnet.cspr.live/transaction/301f4dd7d405fdd91c241e656973cf59cd7508e1b149896f3b4eddd35fd502da) |
+| 2 | 📋 License | Professional Software Engineer License | [View TX](https://testnet.cspr.live/transaction/5ea7b2d8ad7c083ee6f416878487ce0a7f8e64c14d04603c940c79e9ac6a9ace) |
+| 3 | 💼 Employment | Senior Developer - Employment Verification | [View TX](https://testnet.cspr.live/transaction/d4bff277c19f73c44edd6f24f69e7561c82c9006f1539b130297791960d2474d) |
+| 4 | 🪪 Identity | Verified Identity Document | [View TX](https://testnet.cspr.live/transaction/b799f8997e19af0ea3e73a11a99382a26f8c6b8aadd2f9339e859352d4f4ad04) |
 
 ---
 
-## ✅ Our Solution
+## 🎯 Problem Statement
 
-CasperCreds provides **trust infrastructure** for credentials:
-
-| Feature | How It Works |
-|---------|--------------|
-| **Instant Verification** | Query blockchain in seconds, not weeks |
-| **Immutable Records** | Once issued, credentials cannot be altered |
-| **AI Fraud Detection** | HuggingFace NLP + heuristic analysis |
-| **Cryptographic Proof** | Ed25519/Secp256k1 signatures |
-| **Global Accessibility** | Verify from anywhere, no intermediaries |
-| **Privacy Control** | Holders decide what to share |
+Credential fraud costs **$600+ billion globally**:
+- 40% of resumes contain falsified credentials
+- Manual verification takes days/weeks
+- Centralized databases are vulnerable to breaches
 
 ---
 
-## 🎯 Supported Credential Types
+## ✅ Solution
 
-| Category | Examples |
-|----------|----------|
-| 🎓 **Academic** | Degrees, diplomas, transcripts |
-| 📜 **Professional** | AWS/GCP certs, CPA, PMP, bar admission |
-| 📋 **Licenses** | Medical, engineering, real estate |
-| 💼 **Employment** | Job history, title verification |
-| 🪪 **Identity** | KYC verification, age verification |
-| 🏛️ **Memberships** | Professional associations, alumni |
-| � **Trainsing** | Safety certs, compliance training |
+| Feature | Status | Implementation |
+|---------|--------|----------------|
+| **Smart Contract** | ✅ Live | Odra framework on Casper testnet |
+| **Instant Verification** | ✅ Live | On-chain query via RPC |
+| **IPFS Storage** | ✅ Live | Pinata for credential metadata |
+| **AI Fraud Detection** | ✅ Live | HuggingFace BART-MNLI |
+| **URL Routing** | ✅ Live | `/issuer`, `/verifier`, `/holder` |
+| **5 Credential Types** | ✅ Live | Degree, Certificate, License, Employment, Identity |
+| **CSPR.click Integration** | ✅ Live | Multi-wallet support + social login |
 
 ---
 
 ## 🏗️ Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    Frontend (React + Vite)                   │
-│  • Real-time chain stats    • QR code generation            │
-│  • AI fraud detection       • PDF export                    │
-│  • LocalStorage persistence • Multi-language (EN/ES/中文)    │
-└─────────────────────────────────────────────────────────────┘
-                              │
-              ┌───────────────┼───────────────┐
-              ▼               ▼               ▼
-┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
-│  Casper Network │  │  HuggingFace    │  │  LocalStorage   │
-│  (Blockchain)   │  │  (AI/NLP API)   │  │  (Persistence)  │
-└─────────────────┘  └─────────────────┘  └─────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                     FRONTEND (React + Vite)                      │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐              │
+│  │   /issuer   │  │  /verifier  │  │   /holder   │              │
+│  │   Portal    │  │   Portal    │  │   Portal    │              │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘              │
+└─────────┼────────────────┼────────────────┼──────────────────────┘
+          │                │                │
+          ▼                ▼                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    CASPER TESTNET                                │
+│  Contract: fc4506f2d996605cbb8d4e06158b8d4320433e2dde4dc766...  │
+│  • issue() • verify() • revoke() • batch_issue()                │
+└─────────────────────────────────────────────────────────────────┘
+          │                │                │
+          ▼                ▼                ▼
+┌───────────────┐ ┌───────────────┐ ┌───────────────┐
+│ Casper RPC    │ │ HuggingFace   │ │ Pinata IPFS   │
+│ Live stats    │ │ BART-MNLI     │ │ Metadata      │
+└───────────────┘ └───────────────┘ └───────────────┘
 ```
 
 ---
 
-## 🔒 Security
+## 📜 Smart Contract
 
-### On-Chain
-- Owner-controlled issuer registry
-- Issuer-only credential issuance
-- Issuer-only revocation
-- Immutable audit trail
+### Data Structures
 
-### AI Fraud Detection
-- Elite institution claim flagging
-- Date anomaly detection
-- Missing identifier checks
-- HuggingFace NLP classification
+```rust
+struct Credential {
+    issuer: Address,
+    holder: Address,
+    cred_type: String,      // degree, certificate, license, employment, identity
+    title: String,
+    institution: String,
+    issued_at: u64,
+    expires_at: u64,
+    revoked: bool,
+    metadata_hash: String,  // IPFS CID
+    schema_version: u8,
+}
+```
 
-### Cryptographic
-- Ed25519/Secp256k1 signatures
-- Hash-based integrity
-- QR code verification
+### Contract API
+
+| Function | Access | Gas |
+|----------|--------|-----|
+| `register_issuer(addr, name)` | Owner | 50 CSPR |
+| `issue(holder, type, title, expires, hash)` | Issuer | 50 CSPR |
+| `batch_issue(holders[], ...)` | Issuer | 100 CSPR |
+| `revoke(id, reason)` | Issuer | 30 CSPR |
+| `verify(id)` | Public | Free |
+
+### Events
+
+```rust
+event CredentialIssued { id, issuer, holder, cred_type, timestamp }
+event CredentialRevoked { id, issuer, reason, timestamp }
+event IssuerRegistered { issuer, name, timestamp }
+```
+
+---
+
+## 🤖 AI Fraud Detection
+
+```typescript
+// HuggingFace BART-MNLI zero-shot classification
+const response = await fetch('https://api-inference.huggingface.co/models/facebook/bart-large-mnli', {
+  body: JSON.stringify({
+    inputs: credentialText,
+    parameters: { candidate_labels: ['legitimate', 'suspicious', 'fraudulent'] }
+  })
+});
+
+// Risk Score: 0-30 (green) | 31-60 (yellow) | 61-100 (red)
+```
 
 ---
 
@@ -109,18 +139,21 @@ npm run dev
 # Open http://localhost:5173
 ```
 
-### Smart Contract
+### Deploy Contract
 ```bash
 cd contracts
 cargo odra build
-# Output: CasperCreds.wasm
+cargo run --bin casper_credentials_cli -- deploy
 ```
 
-### Deploy
+### Issue Credential (CLI)
 ```bash
-# Set up .env with your secret key
-source .env
-cargo run --bin casper_credentials_cli -- deploy
+cargo run --bin casper_credentials_cli -- scenario issue \
+  --holder "account-hash-..." \
+  --cred-type "degree" \
+  --title "BSc Computer Science" \
+  --expires 0 \
+  --metadata "QmIPFSHash"
 ```
 
 ---
@@ -129,73 +162,44 @@ cargo run --bin casper_credentials_cli -- deploy
 
 ```
 casper-credentials/
-├── frontend/                 # React + TypeScript + Vite
-│   ├── src/App.tsx          # Main application
-│   └── package.json
-├── contracts/               # Odra smart contract
+├── frontend/
 │   ├── src/
-│   │   ├── lib.rs
-│   │   └── creds.rs         # CasperCreds contract
-│   ├── bin/cli.rs           # Deployment CLI
-│   └── Cargo.toml
+│   │   ├── App.tsx       # Main app with routing
+│   │   └── casper.ts     # Casper SDK + IPFS integration
+│   └── .env              # API keys (HuggingFace, Pinata)
+├── contracts/
+│   ├── src/creds.rs      # Smart contract
+│   ├── bin/cli.rs        # Deployment & interaction CLI
+│   └── wasm/             # Compiled WASM
 └── README.md
 ```
 
 ---
 
-## 🔧 Smart Contract API
+## ✅ Hackathon Checklist
 
-```rust
-// Admin
-register_issuer(issuer: Address, name: String)
-deactivate_issuer(issuer: Address)
-
-// Issuer
-issue(holder, type, title, expires_at, metadata_hash) -> U256
-revoke(id: U256)
-
-// Public
-verify(id: U256) -> (bool, Credential)
-get_credential(id: U256) -> Option<Credential>
-get_holder_creds(holder: Address) -> Vec<U256>
-total() -> U256
-```
+- [x] **Smart Contract** - Deployed to Casper testnet
+- [x] **On-Chain Credentials** - 5 real credentials issued
+- [x] **IPFS Integration** - Pinata for metadata storage
+- [x] **AI Integration** - HuggingFace fraud detection
+- [x] **Frontend** - React app with 3 portals
+- [x] **URL Routing** - `/issuer`, `/verifier`, `/holder`
+- [x] **Live Network Stats** - Real-time block/era/peers
+- [x] **Transaction Links** - All TXs link to cspr.live
+- [x] **PDF Export** - Credential certificates
+- [x] **QR Codes** - Shareable verification links
+- [x] **CSPR.click** - Multi-wallet support (Casper Wallet, Ledger, Torus, social login)
 
 ---
 
-## 🌐 APIs Used
+## 🔗 Links
 
-| API | Purpose | Cost |
-|-----|---------|------|
-| Casper RPC | Blockchain queries, chain stats | Free |
-| HuggingFace Inference | NLP fraud classification | Free tier |
-| LocalStorage | Credential persistence | Free |
-
----
-
-## 🛣️ Roadmap
-
-- [x] Smart contract (Odra)
-- [x] Frontend with verification
-- [x] AI fraud detection
-- [x] QR codes + PDF export
-- [x] Multi-language
-- [x] Real chain stats
-- [x] LocalStorage persistence
-- [ ] IPFS metadata storage
-- [ ] Mobile app
-- [ ] Zero-knowledge proofs
-- [ ] Cross-chain support
+- **Contract:** [testnet.cspr.live/contract-package/fc4506f2...](https://testnet.cspr.live/contract-package/fc4506f2d996605cbb8d4e06158b8d4320433e2dde4dc766f65115911ac98973)
+- **Casper Network:** [casper.network](https://casper.network)
+- **Odra Framework:** [odra.dev](https://odra.dev)
 
 ---
 
 ## 📄 License
 
 MIT
-
----
-
-## 🔗 Links
-
-- [GitHub](https://github.com/edwardtay/casper-creds)
-- [Casper Network](https://casper.network)

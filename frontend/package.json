@@ -9,7 +9,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "casper-js-sdk": "^2.15.4",
+    "@make-software/csprclick-core-types": "^1.12.2",
+    "@make-software/csprclick-ui": "^2.0.0-beta.6",
+    "casper-js-sdk": "^2.15.7",
     "html2canvas": "^1.4.1",
     "i18next": "^25.7.3",
     "jspdf": "^3.0.4",
