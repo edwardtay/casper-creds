@@ -397,10 +397,12 @@ export async function issueCredential(
     const payment = DeployUtil.standardPayment(5000000000) // 5 CSPR
 
     // Detect if we are calling a Contract Package (Versioned) or direct Contract
-    const isPackage = CONTRACT_HASH.includes('contract-package-');
+    // Resilience: Check for prefix OR known package hash start (in case env var is stripped)
+    const isPackage = CONTRACT_HASH.includes('contract-package-') || CONTRACT_HASH.startsWith('fc4506');
     console.log(`DEBUG: Detected as package? ${isPackage}`)
 
     if (isPackage) {
+      // Remove prefix if present, otherwise assume it's already raw hex
       const packageHashHex = CONTRACT_HASH.replace('contract-package-', '')
       console.log('Constructing Versioned Call for Package:', packageHashHex)
 
