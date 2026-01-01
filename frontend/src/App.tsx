@@ -129,6 +129,7 @@ export default function App() {
   const [chainStats, setChainStats] = useState<ChainStats|null>(null)
   const [credentials, setCredentials] = useState<Credential[]>(loadStorage)
   const [toast, setToast] = useState<{t:'ok'|'err', m:string}|null>(null)
+  const [walletMenuOpen, setWalletMenuOpen] = useState(false)
 
   // Handle browser back/forward
   useEffect(() => {
@@ -170,6 +171,26 @@ export default function App() {
       setPubKey(await p.getActivePublicKey())
       setToast({t:'ok', m:'Wallet connected'})
     } catch (e: any) { setToast({t:'err', m:e.message}) }
+  }
+
+  const disconnectWallet = () => {
+    if (clickRef) {
+      clickRef.signOut()
+    }
+    setPubKey('')
+    setWalletMenuOpen(false)
+    setToast({t:'ok', m:'Wallet disconnected'})
+  }
+
+  const copyAddress = () => {
+    navigator.clipboard.writeText(pubKey)
+    setToast({t:'ok', m:'Address copied'})
+    setWalletMenuOpen(false)
+  }
+
+  const viewOnExplorer = () => {
+    window.open(`https://testnet.cspr.live/account/${pubKey}`, '_blank')
+    setWalletMenuOpen(false)
   }
 
   // Listen for CSPR.click account changes
@@ -233,8 +254,19 @@ export default function App() {
           </div>
           <div className="flex items-center gap-3">
             {pubKey ? (
-              <div className="flex items-center gap-2 bg-zinc-900 px-3 py-1.5 rounded-lg border border-zinc-800">
-                <span className="w-2 h-2 bg-green-500 rounded-full"/><code className="text-sm text-zinc-400">{pubKey.slice(0,8)}...{pubKey.slice(-4)}</code>
+              <div className="relative">
+                <button onClick={()=>setWalletMenuOpen(!walletMenuOpen)} className="flex items-center gap-2 bg-zinc-900 px-3 py-1.5 rounded-lg border border-zinc-800 hover:bg-zinc-800 transition">
+                  <span className="w-2 h-2 bg-green-500 rounded-full"/><code className="text-sm text-zinc-400">{pubKey.slice(0,8)}...{pubKey.slice(-4)}</code>
+                  <span className="text-zinc-500 text-xs">▼</span>
+                </button>
+                {walletMenuOpen && (
+                  <div className="absolute right-0 top-full mt-2 w-48 bg-zinc-900 border border-zinc-700 rounded-xl shadow-xl z-50 overflow-hidden">
+                    <button onClick={copyAddress} className="w-full px-4 py-3 text-left text-sm hover:bg-zinc-800 flex items-center gap-2">📋 Copy Address</button>
+                    <button onClick={viewOnExplorer} className="w-full px-4 py-3 text-left text-sm hover:bg-zinc-800 flex items-center gap-2">🔗 View on Explorer</button>
+                    <div className="border-t border-zinc-700"/>
+                    <button onClick={disconnectWallet} className="w-full px-4 py-3 text-left text-sm hover:bg-zinc-800 text-red-400 flex items-center gap-2">🚪 Disconnect</button>
+                  </div>
+                )}
               </div>
             ) : (
               <button onClick={connectWallet} className="px-4 py-2 bg-gradient-to-r from-red-600 to-red-700 rounded-lg font-medium shadow-lg shadow-red-500/20">Connect Wallet</button>
@@ -249,9 +281,9 @@ export default function App() {
       </header>
       {toast && <div className={`fixed top-20 right-6 px-5 py-3 rounded-xl text-sm shadow-2xl z-50 ${toast.t==='err'?'bg-red-950 border border-red-800':'bg-green-950 border border-green-800'}`}>{toast.m} <button onClick={()=>setToast(null)} className="ml-3">×</button></div>}
       <main className="relative max-w-7xl mx-auto px-6 py-8">
-        {role === 'issuer' && <IssuerPortal pubKey={pubKey} credentials={credentials} addCredential={addCredential} setToast={setToast} connectWallet={connectWallet} clickRef={clickRef}/>}
+        {role === 'issuer' && <IssuerPortal pubKey={pubKey} credentials={credentials} addCredential={addCredential} setToast={setToast} clickRef={clickRef}/>}
         {role === 'verifier' && <VerifierPortal credentials={credentials} setToast={setToast}/>}
-        {role === 'holder' && <HolderPortal pubKey={pubKey} credentials={credentials} setToast={setToast} connectWallet={connectWallet}/>}
+        {role === 'holder' && <HolderPortal pubKey={pubKey} credentials={credentials} setToast={setToast}/>}
       </main>
     </div>
   )
@@ -402,7 +434,7 @@ function LandingPage({ setRole, chainStats, credentials }: { setRole:(r:Role)=>v
 }
 
 
-function IssuerPortal({ pubKey, credentials, addCredential, setToast, connectWallet, clickRef }: { pubKey:string, credentials:Credential[], addCredential:(c:Credential)=>void, setToast:(t:any)=>void, connectWallet:()=>void, clickRef:any }) {
+function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }: { pubKey:string, credentials:Credential[], addCredential:(c:Credential)=>void, setToast:(t:any)=>void, clickRef:any }) {
   const [view, setView] = useState<'issue'|'batch'|'history'>('issue')
   const [form, setForm] = useState({ holder:'', type:'degree', title:'', institution:'', expires:'', holderName:'', description:'', grade:'', skills:'' })
   const [loading, setLoading] = useState(false)
@@ -667,7 +699,7 @@ function VerifierPortal({ credentials, setToast }: { credentials:Credential[], s
   )
 }
 
-function HolderPortal({ pubKey, credentials, setToast, connectWallet }: { pubKey:string, credentials:Credential[], setToast:(t:any)=>void, connectWallet:()=>void }) {
+function HolderPortal({ pubKey, credentials, setToast }: { pubKey:string, credentials:Credential[], setToast:(t:any)=>void }) {
   const [selected, setSelected] = useState<Credential|null>(null)
   const certRef = useRef<HTMLDivElement>(null)
   const myCreds = credentials.filter(c => c.holder === pubKey)
