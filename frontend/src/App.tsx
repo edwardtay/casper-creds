@@ -471,32 +471,34 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }
       
       setImageFile(file)
       const reader = new FileReader()
-      reader.onload = async (e) => {
-        const base64 = e.target?.result as string
+      reader.onload = async (evt) => {
+        const base64 = evt.target?.result as string
         setImagePreview(base64)
         
-        // Try OCR extraction (with abort support)
+        // Try OCR extraction
         if (file.type.startsWith('image/')) {
           const abortController = new AbortController()
           extractAbortRef.current = abortController
           setExtracting(true)
+          setToast({t:'ok', m:'🔍 Running OCR...'})
           
           try {
             const extracted = await extractCredentialInfo(base64, abortController.signal)
             if (extracted && !abortController.signal.aborted) {
-              setForm(prev => ({
-                ...prev,
-                ...extracted
-              }))
+              setForm(prev => ({ ...prev, ...extracted }))
               setToast({t:'ok', m:'✓ Auto-filled from image'})
+            } else if (!abortController.signal.aborted) {
+              setToast({t:'ok', m:'OCR complete - no fields detected'})
             }
           } catch (err: any) {
             if (err.name !== 'AbortError') {
               console.error('OCR failed:', err)
+              setToast({t:'err', m:'OCR failed: ' + (err.message || 'Unknown error')})
             }
           } finally {
             if (!abortController.signal.aborted) {
               setExtracting(false)
+              extractAbortRef.current = null
             }
           }
         }
@@ -518,9 +520,14 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }
 
   // Extract credential info from image using Tesseract.js (fast, client-side OCR)
   const extractCredentialInfo = async (base64Image: string, signal: AbortSignal): Promise<Partial<typeof form> | null> => {
+    let worker: any = null
     try {
-      // Create Tesseract worker
-      const worker = await createWorker('eng')
+      console.log('Starting Tesseract OCR...')
+      
+      // Create Tesseract worker with progress logging
+      worker = await createWorker('eng', 1, {
+        logger: (m: any) => console.log('Tesseract:', m.status, m.progress ? `${Math.round(m.progress * 100)}%` : '')
+      })
       
       if (signal.aborted) {
         await worker.terminate()
@@ -528,12 +535,14 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }
       }
       
       // Run OCR (~1-3 seconds, runs locally in browser)
+      console.log('Running recognition...')
       const { data: { text: extractedText } } = await worker.recognize(base64Image)
       await worker.terminate()
+      worker = null
       
       if (signal.aborted) return null
       
-      console.log('OCR extracted:', extractedText)
+      console.log('OCR extracted text:', extractedText.substring(0, 200) + '...')
       
       // Parse common credential patterns
       const result: Partial<typeof form> = {}
@@ -590,11 +599,14 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }
       if (text.includes('licensed')) result.grade = 'Licensed'
       else if (text.includes('pass')) result.grade = 'Pass'
       
+      console.log('Extracted fields:', result)
       return Object.keys(result).length > 0 ? result : null
     } catch (err: any) {
-      if (err.name === 'AbortError') throw err
       console.error('OCR error:', err)
-      return null
+      if (worker) {
+        try { await worker.terminate() } catch {}
+      }
+      throw err
     }
   }
 
