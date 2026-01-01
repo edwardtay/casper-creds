@@ -192,7 +192,7 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string, clickRef?: an
   const deployJsonStr = JSON.stringify(deployJson)
   
   // Use wallet.sign() with deploy JSON - this is the standard method
-  console.log('Using wallet.sign with deploy JSON')
+  console.log('Using wallet sign with deploy JSON')
   const signResult = await wallet.sign(deployJsonStr, publicKey)
   
   console.log('Sign result keys:', Object.keys(signResult || {}))
@@ -201,19 +201,44 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string, clickRef?: an
   
   // Handle different response formats from the wallet
   if (signResult.deploy) {
-    // Wallet returned signed deploy directly
-    console.log('Using signResult.deploy')
+    // Wallet returned signed deploy directly - this is the ideal case
+    console.log('Wallet returned signed deploy directly')
     const signedDeployJson = typeof signResult.deploy === 'string' 
       ? JSON.parse(signResult.deploy) 
       : signResult.deploy
+    
+    // Try SDK first
     const result = DeployUtil.deployFromJson(signedDeployJson)
-    if (result.err) throw new Error('Failed to parse signed deploy: ' + result.err)
-    const deployHash = await casperClient.putDeploy(result.val)
-    return deployHash
+    if (!result.err) {
+      console.log('Submitting via SDK...')
+      const deployHash = await casperClient.putDeploy(result.val)
+      return deployHash
+    }
+    
+    // Fallback to RPC
+    console.log('SDK parse failed, trying RPC...')
+    const rpcUrl = getRpcUrl()
+    const rpcResponse = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'account_put_deploy',
+        params: { deploy: signedDeployJson.deploy || signedDeployJson },
+        id: Date.now()
+      })
+    })
+    const rpcResult = await rpcResponse.json()
+    if (rpcResult.result?.deploy_hash) {
+      return rpcResult.result.deploy_hash
+    }
+    if (rpcResult.error) {
+      throw new Error(rpcResult.error.message || 'RPC error')
+    }
   }
   
   if (signResult.signatureHex || signResult.signature) {
-    // Wallet returned signature - we need to attach it to the deploy
+    // Wallet returned signature only - need to use SDK to attach it properly
     let sigHex: string
     
     if (signResult.signatureHex && typeof signResult.signatureHex === 'string') {
@@ -237,42 +262,40 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string, clickRef?: an
     
     console.log('Signature hex length:', sigHex.length)
     
-    // Add algorithm prefix if needed (01 for ed25519, 02 for secp256k1)
-    let fullSigHex = sigHex
-    if (sigHex.length === 128) {
-      const keyPrefix = publicKey.substring(0, 2)
-      fullSigHex = keyPrefix + sigHex
-      console.log('Added algorithm prefix:', keyPrefix)
-    }
+    // The Casper Wallet sign() method signs the JSON string, not the deploy hash
+    // This means the signature won't verify against the deploy hash
+    // We need to inform the user that this wallet version doesn't support deploy signing
     
-    // Build signed deploy JSON and submit via RPC
-    const signedDeployJson = JSON.parse(JSON.stringify(deployJson))
-    signedDeployJson.deploy.approvals = [{
-      signer: publicKey,
-      signature: fullSigHex
-    }]
-    
-    console.log('Submitting via RPC...')
-    const rpcUrl = getRpcUrl()
-    const rpcResponse = await fetch(rpcUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        method: 'account_put_deploy',
-        params: { deploy: signedDeployJson.deploy },
-        id: Date.now()
-      })
-    })
-    const rpcResult = await rpcResponse.json()
-    console.log('RPC result:', rpcResult)
-    
-    if (rpcResult.result?.deploy_hash) {
-      console.log('Deploy submitted! Hash:', rpcResult.result.deploy_hash)
-      return rpcResult.result.deploy_hash
-    }
-    if (rpcResult.error) {
-      throw new Error(rpcResult.error.message || 'RPC error')
+    // Try anyway with SDK's setSignature
+    try {
+      const signerKey = CLPublicKey.fromHex(publicKey)
+      
+      // Add algorithm prefix if needed
+      let fullSigHex = sigHex
+      if (sigHex.length === 128) {
+        const keyPrefix = publicKey.substring(0, 2)
+        fullSigHex = keyPrefix + sigHex
+        console.log('Added algorithm prefix:', keyPrefix)
+      }
+      
+      // Convert hex to bytes
+      const sigBytes = new Uint8Array(fullSigHex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)))
+      
+      // Use SDK to set signature
+      const signedDeploy = DeployUtil.setSignature(deploy, sigBytes, signerKey)
+      
+      console.log('Submitting via SDK with setSignature...')
+      const deployHash = await casperClient.putDeploy(signedDeploy)
+      return deployHash
+    } catch (sdkError: any) {
+      console.log('SDK setSignature failed:', sdkError.message)
+      
+      // The signature is over the wrong data (JSON string vs deploy hash)
+      // This is a fundamental limitation of the Casper Wallet extension
+      throw new Error(
+        'Deploy signing failed. The Casper Wallet extension may not support transaction signing. ' +
+        'Please try using CSPR.click with a different wallet (Ledger, Torus, etc.) or the Casper Signer extension.'
+      )
     }
   }
   
