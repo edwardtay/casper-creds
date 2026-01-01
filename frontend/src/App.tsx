@@ -818,9 +818,33 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <form onSubmit={issue} className="lg:col-span-2 p-6 bg-zinc-900/50 rounded-2xl border border-zinc-800"><h3 className="text-lg font-semibold mb-6">Issue New Credential</h3>
             <div className="grid grid-cols-2 gap-4">
+              <div className="col-span-2"><label className="block text-sm text-zinc-400 mb-2">Type *</label><select value={form.type} onChange={e=>setForm({...form,type:e.target.value})} className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700"><option value="degree">🎓 Degree</option><option value="certificate">📜 Certificate</option><option value="license">📋 License</option><option value="employment">💼 Employment</option><option value="identity">🪪 Identity</option></select></div>
+              <div className="col-span-2">
+                <label className="block text-sm text-zinc-400 mb-2">Image/Document (AI Auto-Extract + IPFS)</label>
+                {imagePreview ? (
+                  <div className="flex items-center gap-3">
+                    <div className="relative inline-block group">
+                      <img src={imagePreview} alt="Preview" className="h-16 rounded-lg border border-zinc-700 cursor-pointer transition-transform"/>
+                      <button type="button" onClick={clearImage} className="absolute -top-2 -right-2 w-6 h-6 bg-red-600 rounded-full text-white text-xs hover:bg-red-500">×</button>
+                      <div className="fixed inset-0 z-50 hidden group-hover:flex items-center justify-center bg-black/80 pointer-events-none">
+                        <img src={imagePreview} alt="Preview enlarged" className="max-w-[90vw] max-h-[90vh] rounded-xl shadow-2xl"/>
+                      </div>
+                    </div>
+                    {extracting && <div className="flex items-center gap-2 text-sm text-purple-400"><span className="animate-spin">⚙️</span> Extracting...</div>}
+                  </div>
+                ) : (
+                  <label className="flex items-center justify-center w-full h-20 border-2 border-dashed border-zinc-700 rounded-xl cursor-pointer hover:border-purple-500 transition">
+                    <div className="text-center">
+                      <span className="text-2xl">🤖</span>
+                      <p className="text-xs text-zinc-400 mt-1">Upload credential → AI auto-fills form</p>
+                      <p className="text-xs text-zinc-600">OCR extracts name, title, institution, dates</p>
+                    </div>
+                    <input type="file" accept="image/*,.pdf" onChange={handleImageChange} className="hidden"/>
+                  </label>
+                )}
+              </div>
               <div className="col-span-2"><label className="block text-sm text-zinc-400 mb-2">Holder Address *</label><input value={form.holder} onChange={e=>setForm({...form,holder:e.target.value})} placeholder="02abc... (Casper public key)" className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700 font-mono text-sm" required/></div>
               <div className="col-span-2"><label className="block text-sm text-zinc-400 mb-2">Holder Name</label><input value={form.holderName} onChange={e=>setForm({...form,holderName:e.target.value})} placeholder="e.g. John Smith" className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700"/></div>
-              <div><label className="block text-sm text-zinc-400 mb-2">Type</label><select value={form.type} onChange={e=>setForm({...form,type:e.target.value})} className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700"><option value="degree">🎓 Degree</option><option value="certificate">📜 Certificate</option><option value="license">📋 License</option><option value="employment">💼 Employment</option><option value="identity">🪪 Identity</option></select></div>
               <div><label className="block text-sm text-zinc-400 mb-2">Start Date</label><input type="date" value={form.startDate} onChange={e=>setForm({...form,startDate:e.target.value})} className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700"/></div>
               <div><label className="block text-sm text-zinc-400 mb-2">Expiration</label><input type="date" value={form.expires} onChange={e=>setForm({...form,expires:e.target.value})} className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700"/></div>
               <div className="col-span-2"><label className="block text-sm text-zinc-400 mb-2">Institution *</label><input value={form.institution} onChange={e=>setForm({...form,institution:e.target.value})} placeholder="e.g. MIT, AWS, State Board" className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700" required/></div>
@@ -828,27 +852,6 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }
               <div><label className="block text-sm text-zinc-400 mb-2">Grade/Score</label><input value={form.grade} onChange={e=>setForm({...form,grade:e.target.value})} placeholder="e.g. 3.8 GPA, A+, Pass" className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700"/></div>
               <div><label className="block text-sm text-zinc-400 mb-2">Skills</label><input value={form.skills} onChange={e=>setForm({...form,skills:e.target.value})} placeholder="e.g. Python, AWS, Leadership" className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700"/></div>
               <div className="col-span-2"><label className="block text-sm text-zinc-400 mb-2">Description</label><textarea value={form.description} onChange={e=>setForm({...form,description:e.target.value})} placeholder="Additional details about the credential..." rows={2} className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700"/></div>
-              <div className="col-span-2">
-                <label className="block text-sm text-zinc-400 mb-2">Image/Document (AI Auto-Extract + IPFS)</label>
-                {imagePreview ? (
-                  <div className="flex items-center gap-3">
-                    <div className="relative inline-block">
-                      <img src={imagePreview} alt="Preview" className="h-24 rounded-lg border border-zinc-700"/>
-                      <button type="button" onClick={clearImage} className="absolute -top-2 -right-2 w-6 h-6 bg-red-600 rounded-full text-white text-xs hover:bg-red-500">×</button>
-                    </div>
-                    {extracting && <div className="flex items-center gap-2 text-sm text-purple-400"><span className="animate-spin">⚙️</span> Extracting...</div>}
-                  </div>
-                ) : (
-                  <label className="flex items-center justify-center w-full h-24 border-2 border-dashed border-zinc-700 rounded-xl cursor-pointer hover:border-purple-500 transition">
-                    <div className="text-center">
-                      <span className="text-2xl">🤖</span>
-                      <p className="text-xs text-zinc-400 mt-1">Upload credential → AI auto-fills form</p>
-                      <p className="text-xs text-zinc-600">OCR extracts name, title, institution</p>
-                    </div>
-                    <input type="file" accept="image/*,.pdf" onChange={handleImageChange} className="hidden"/>
-                  </label>
-                )}
-              </div>
               <div className="col-span-2"><button disabled={loading} className="w-full py-4 bg-gradient-to-r from-purple-600 to-purple-700 rounded-xl font-medium disabled:opacity-50 text-lg">{loading ? 'Issuing...' : '📝 Issue Credential'}</button></div>
             </div>
           </form>
