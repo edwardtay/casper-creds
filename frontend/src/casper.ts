@@ -378,6 +378,8 @@ export async function issueCredential(
   clickRef?: any
 ): Promise<{ deployHash: string } | null> {
   try {
+    console.log("DEBUG: Global CONTRACT_HASH value:", CONTRACT_HASH)
+
     if (!CONTRACT_HASH) throw new Error('Contract not configured')
 
     const issuerKey = CLPublicKey.fromHex(issuerPublicKey)
@@ -395,7 +397,10 @@ export async function issueCredential(
     const payment = DeployUtil.standardPayment(5000000000) // 5 CSPR
 
     // Detect if we are calling a Contract Package (Versioned) or direct Contract
-    if (CONTRACT_HASH.startsWith('contract-package-')) {
+    const isPackage = CONTRACT_HASH.includes('contract-package-');
+    console.log(`DEBUG: Detected as package? ${isPackage}`)
+
+    if (isPackage) {
       const packageHashHex = CONTRACT_HASH.replace('contract-package-', '')
       console.log('Constructing Versioned Call for Package:', packageHashHex)
 
