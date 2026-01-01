@@ -522,11 +522,10 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }
   const extractCredentialInfo = async (base64Image: string, signal: AbortSignal): Promise<Partial<typeof form> | null> => {
     let worker: any = null
     try {
-      console.log('Starting Tesseract OCR...')
       
-      // Create Tesseract worker with progress logging
+      // Create Tesseract worker (silent mode)
       worker = await createWorker('eng', 1, {
-        logger: (m: any) => console.log('Tesseract:', m.status, m.progress ? `${Math.round(m.progress * 100)}%` : '')
+        logger: () => {} // Suppress verbose logging
       })
       
       if (signal.aborted) {
@@ -535,14 +534,11 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }
       }
       
       // Run OCR
-      console.log('Running recognition...')
       const { data: { text: extractedText } } = await worker.recognize(base64Image)
       await worker.terminate()
       worker = null
       
       if (signal.aborted) return null
-      
-      console.log('OCR extracted text:', extractedText)
       
       // Parse credential info from extracted text
       const result: Partial<typeof form> = {}
@@ -684,7 +680,6 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }
         }
       }
       
-      console.log('Extracted fields:', result)
       return Object.keys(result).length > 0 ? result : null
     } catch (err: any) {
       console.error('OCR error:', err)
@@ -710,7 +705,6 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }
       try {
         setToast({t:'ok', m:'Uploading image to IPFS...'})
         imageHash = await uploadImageToIPFS(imageFile)
-        console.log('Image IPFS hash:', imageHash)
       } catch (err) {
         console.error('Image upload failed:', err)
       }
@@ -738,7 +732,6 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }
           idNumber: form.idNumber,
           imageUrl: imageHash ? `ipfs://${imageHash}` : undefined
         })
-        console.log('IPFS hash:', metadataHash)
       } catch (err) {
         console.error('IPFS upload failed:', err)
       }

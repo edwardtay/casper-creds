@@ -162,21 +162,10 @@ export async function issueCredential(
 
     const deployJson = DeployUtil.deployToJson(deploy)
     
-    // Debug: log clickRef structure
-    console.log('clickRef:', clickRef)
-    console.log('clickRef type:', typeof clickRef)
-    if (clickRef) {
-      console.log('clickRef.send:', clickRef.send)
-      console.log('clickRef.send type:', typeof clickRef.send)
-      console.log('clickRef keys:', Object.keys(clickRef))
-    }
-    
     // Try CSPR.click SDK if available
     if (clickRef && typeof clickRef.send === 'function') {
       try {
-        console.log('Using CSPR.click SDK to send deploy...')
         const result = await clickRef.send(deployJson, issuerPublicKey)
-        console.log('CSPR.click result:', result)
         if (result?.cancelled) throw new Error('User cancelled signing')
         if (result?.error) throw new Error(result.error)
         if (result?.deployHash) return { deployHash: result.deployHash }
@@ -193,7 +182,6 @@ export async function issueCredential(
     const wallet = (window as any).CasperWalletProvider?.()
     if (!wallet) throw new Error('No wallet available. Install Casper Wallet browser extension.')
     
-    console.log('Using Casper Wallet extension...')
     const signResult = await wallet.signDeploy(deployJson, issuerPublicKey)
     
     if (signResult.cancelled) throw new Error('User cancelled signing')
@@ -243,7 +231,6 @@ export async function revokeCredential(
     // Try CSPR.click SDK if available
     if (clickRef && typeof clickRef.send === 'function') {
       try {
-        console.log('Using CSPR.click SDK to send revoke...')
         const result = await clickRef.send(deployJson, issuerPublicKey)
         if (result?.cancelled) throw new Error('User cancelled signing')
         if (result?.error) throw new Error(result.error)
