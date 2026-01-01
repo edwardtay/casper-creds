@@ -270,7 +270,6 @@ function LandingPage({ setRole, chainStats, credentials }: { setRole:(r:Role)=>v
           </div>
           <div className="flex items-center gap-4 text-sm text-zinc-500">
             {contractReady && <a href={`https://testnet.cspr.live/contract-package/${contractHash}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-green-400 hover:text-green-300"><span className="w-2 h-2 bg-green-500 rounded-full"/>Contract ↗</a>}
-            {chainStats && <span className="hidden sm:inline text-zinc-400">Block #{chainStats.blockHeight.toLocaleString()}</span>}
           </div>
         </div>
       </header>
