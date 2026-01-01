@@ -277,9 +277,9 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string, clickRef?: an
 
   // If wallet returned only signature (standard behavior for signDeploy)
   if (signResult.signature) {
-    console.log('Wallet returned signature, attaching to ORIGINAL deploy object...')
+    console.log('Wallet returned signature. Using direct RPC submission...')
 
-    // Quick hex conversion helper to avoid dependency issues
+    // Quick hex conversion helper
     const toHex = (data: any) => {
       if (typeof data === 'string') return data;
       return Array.from(new Uint8Array(data))
@@ -287,45 +287,35 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string, clickRef?: an
         .join('');
     }
 
-    // Convert Uint8Array signature to hex string if needed
     let signatureHex = toHex(signResult.signature)
-
-    // Sometimes the wallet might return it in a different property
     if (signResult.signatureHex) signatureHex = signResult.signatureHex
-
     console.log('Signature Hex:', signatureHex)
 
-    // Create the approval object
-    // Verify format: SDK expects just the hex string for 'signature'
+    // Prepare valid approval object
     const approval = {
       signer: publicKey,
       signature: signatureHex
     }
 
-    // Apply to the ORIGINAL deploy object to avoid serialization mismatch
-    // The SDK deploy object usually has an 'approvals' array
-    if (!deploy.approvals) deploy.approvals = []
+    // Convert ORIGINAL deploy to JSON first
+    // This gives us a plain JS object we can modify without SDK class errors
+    const deployJsonWrapper = DeployUtil.deployToJson(deploy)
+    const deployObj = (deployJsonWrapper as any).deploy || deployJsonWrapper
 
-    // Check if already signed to avoid duplicates
-    const alreadySigned = deploy.approvals.some((a: any) => a.signer === publicKey)
-    if (!alreadySigned) {
-      deploy.approvals.push(approval)
+    // Initialize approvals if missing
+    if (!deployObj.approvals) deployObj.approvals = []
+
+    // Append our new approval
+    // Check for duplicates first
+    const exists = deployObj.approvals.some((a: any) => a.signer === publicKey)
+    if (!exists) {
+      deployObj.approvals.push(approval)
     }
 
-    console.log('Submitting deploy with hash:', Number(deploy.hash))
+    console.log('Submitting via RPC with approvals:', deployObj.approvals.length)
 
-    // Try via SDK first
-    try {
-      const result = DeployUtil.deployFromJson(DeployUtil.deployToJson(deploy))
-      if (!result.err) {
-        const hash = await casperClient.putDeploy(result.val)
-        return hash
-      }
-    } catch (e) {
-      console.warn('SDK putDeploy failed, trying direct RPC...', e)
-    }
-
-    // Fallback: Try RPC directly via proxy (bypasses SDK validation issues)
+    // Submit directly to RPC
+    // This bypasses SDK's "expected class instance" checks
     const rpcUrl = getRpcUrl()
     const rpcResponse = await fetch(rpcUrl, {
       method: 'POST',
@@ -333,16 +323,23 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string, clickRef?: an
       body: JSON.stringify({
         jsonrpc: '2.0',
         method: 'account_put_deploy',
-        params: { deploy: DeployUtil.deployToJson(deploy).deploy },
+        params: { deploy: deployObj },
         id: Date.now()
       })
     })
+
     const rpcResult = await rpcResponse.json()
+    console.log('RPC Result:', JSON.stringify(rpcResult))
+
     if (rpcResult.result?.deploy_hash) {
       return rpcResult.result.deploy_hash
-    } else if (rpcResult.error) {
-      throw new Error(rpcResult.error.message)
     }
+
+    if (rpcResult.error) {
+      throw new Error(`RPC Error: ${rpcResult.error.message} (Code: ${rpcResult.error.code})`)
+    }
+
+    throw new Error('Unknown RPC response format')
   }
 
   throw new Error('Wallet signing failed: No signature or deploy returned.')
