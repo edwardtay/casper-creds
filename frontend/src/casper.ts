@@ -118,42 +118,69 @@ export async function getCredentialFromChain(credentialId: number): Promise<OnCh
 async function signAndSubmitDeploy(deploy: any, publicKey: string, clickRef?: any): Promise<string> {
   const deployJson = DeployUtil.deployToJson(deploy)
   
-  // Log clickRef methods if available
+  // CSPR.click is the preferred method - it handles signing properly
   if (clickRef) {
     const methods = Object.keys(clickRef).filter(k => typeof clickRef[k] === 'function')
-    console.log('CSPR.click methods:', methods)
+    console.log('CSPR.click available methods:', methods)
     
-    // Try different CSPR.click methods for signing
+    // Try send() - this is the main method for sending deploys
+    if (typeof clickRef.send === 'function') {
+      console.log('Using CSPR.click send()')
+      try {
+        // send() expects the deploy object, not JSON
+        const result = await clickRef.send(deploy, publicKey)
+        console.log('CSPR.click send result:', result)
+        if (result?.cancelled) throw new Error('User cancelled signing')
+        if (result?.deployHash) return result.deployHash
+        if (result?.deploy_hash) return result.deploy_hash
+        if (typeof result === 'string') return result
+      } catch (e: any) {
+        console.log('CSPR.click send failed:', e.message)
+      }
+    }
+    
+    // Try signAndSend()
     if (typeof clickRef.signAndSend === 'function') {
       console.log('Using CSPR.click signAndSend()')
       try {
-        const result = await clickRef.signAndSend(deployJson, publicKey)
+        const result = await clickRef.signAndSend(deploy, publicKey)
         console.log('signAndSend result:', result)
         if (result?.cancelled) throw new Error('User cancelled signing')
         if (result?.deployHash) return result.deployHash
         if (result?.deploy_hash) return result.deploy_hash
+        if (typeof result === 'string') return result
       } catch (e: any) {
         console.log('signAndSend failed:', e.message)
       }
     }
     
-    if (typeof clickRef.send === 'function') {
-      console.log('Using CSPR.click send()')
+    // Try sign() to get signed deploy back
+    if (typeof clickRef.sign === 'function') {
+      console.log('Using CSPR.click sign()')
       try {
-        const result = await clickRef.send(deployJson, publicKey)
-        console.log('send result:', result)
+        const result = await clickRef.sign(deploy, publicKey)
+        console.log('CSPR.click sign result:', result)
         if (result?.cancelled) throw new Error('User cancelled signing')
+        if (result?.deploy) {
+          // Got signed deploy, submit it
+          const signedDeploy = typeof result.deploy === 'string' ? JSON.parse(result.deploy) : result.deploy
+          const deployResult = DeployUtil.deployFromJson(signedDeploy)
+          if (!deployResult.err) {
+            const hash = await casperClient.putDeploy(deployResult.val)
+            return hash
+          }
+        }
         if (result?.deployHash) return result.deployHash
-        if (result?.deploy_hash) return result.deploy_hash
       } catch (e: any) {
-        console.log('send failed:', e.message)
+        console.log('CSPR.click sign failed:', e.message)
       }
     }
     
+    // Try signDeploy()
     if (typeof clickRef.signDeploy === 'function') {
       console.log('Using CSPR.click signDeploy()')
       try {
-        const result = await clickRef.signDeploy(deployJson, publicKey)
+        const result = await clickRef.signDeploy(deploy, publicKey)
         console.log('signDeploy result:', result)
         if (result?.cancelled) throw new Error('User cancelled signing')
         if (result?.deploy) {
@@ -171,10 +198,32 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string, clickRef?: an
     }
   }
   
+  // Try Casper Signer (legacy extension) first - it properly signs deploys
+  const CasperSigner = (window as any).casperlabsHelper
+  if (CasperSigner) {
+    console.log('Found Casper Signer (legacy)')
+    try {
+      const isConnected = await CasperSigner.isConnected()
+      if (!isConnected) {
+        await CasperSigner.requestConnection()
+      }
+      // Casper Signer's sign method properly signs the deploy hash
+      const signedDeployJson = await CasperSigner.sign(deployJson, publicKey)
+      console.log('Casper Signer signed deploy')
+      const deployResult = DeployUtil.deployFromJson(signedDeployJson)
+      if (!deployResult.err) {
+        const hash = await casperClient.putDeploy(deployResult.val)
+        return hash
+      }
+    } catch (e: any) {
+      console.log('Casper Signer failed:', e.message)
+    }
+  }
+  
   // Fallback to Casper Wallet extension
   const CasperWalletProvider = (window as any).CasperWalletProvider
   if (!CasperWalletProvider) {
-    throw new Error('No wallet available. Please use CSPR.click or install Casper Wallet extension.')
+    throw new Error('No wallet available. Please install Casper Wallet or Casper Signer extension.')
   }
   
   const wallet = CasperWalletProvider()
@@ -183,40 +232,34 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string, clickRef?: an
     await wallet.requestConnection()
   }
   
-  console.log('Using Casper Wallet')
-  
-  // Check available wallet methods
+  console.log('Using Casper Wallet extension')
   const walletMethods = Object.keys(wallet).filter(k => typeof wallet[k] === 'function')
   console.log('Wallet methods:', walletMethods)
   
   const deployJsonStr = JSON.stringify(deployJson)
   
-  // Use wallet.sign() with deploy JSON - this is the standard method
-  console.log('Using wallet sign with deploy JSON')
+  // Use wallet.sign() - note: this may not work for deploy signing
+  console.log('Calling wallet.sign()')
   const signResult = await wallet.sign(deployJsonStr, publicKey)
   
   console.log('Sign result keys:', Object.keys(signResult || {}))
   
   if (signResult.cancelled) throw new Error('User cancelled signing')
   
-  // Handle different response formats from the wallet
+  // If wallet returns a signed deploy, use it
   if (signResult.deploy) {
-    // Wallet returned signed deploy directly - this is the ideal case
-    console.log('Wallet returned signed deploy directly')
+    console.log('Wallet returned signed deploy')
     const signedDeployJson = typeof signResult.deploy === 'string' 
       ? JSON.parse(signResult.deploy) 
       : signResult.deploy
     
-    // Try SDK first
     const result = DeployUtil.deployFromJson(signedDeployJson)
     if (!result.err) {
-      console.log('Submitting via SDK...')
-      const deployHash = await casperClient.putDeploy(result.val)
-      return deployHash
+      const hash = await casperClient.putDeploy(result.val)
+      return hash
     }
     
-    // Fallback to RPC
-    console.log('SDK parse failed, trying RPC...')
+    // Try RPC directly
     const rpcUrl = getRpcUrl()
     const rpcResponse = await fetch(rpcUrl, {
       method: 'POST',
@@ -232,74 +275,14 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string, clickRef?: an
     if (rpcResult.result?.deploy_hash) {
       return rpcResult.result.deploy_hash
     }
-    if (rpcResult.error) {
-      throw new Error(rpcResult.error.message || 'RPC error')
-    }
   }
   
-  if (signResult.signatureHex || signResult.signature) {
-    // Wallet returned signature only - need to use SDK to attach it properly
-    let sigHex: string
-    
-    if (signResult.signatureHex && typeof signResult.signatureHex === 'string') {
-      console.log('Using signResult.signatureHex')
-      sigHex = signResult.signatureHex.startsWith('0x') 
-        ? signResult.signatureHex.slice(2) 
-        : signResult.signatureHex
-    } else {
-      console.log('Using signResult.signature, type:', typeof signResult.signature)
-      const sig = signResult.signature
-      if (typeof sig === 'string') {
-        sigHex = sig.startsWith('0x') ? sig.slice(2) : sig
-      } else if (sig instanceof Uint8Array) {
-        sigHex = Array.from(sig).map((b: number) => b.toString(16).padStart(2, '0')).join('')
-      } else if (Array.isArray(sig)) {
-        sigHex = sig.map((b: number) => b.toString(16).padStart(2, '0')).join('')
-      } else {
-        throw new Error('Unknown signature format: ' + typeof sig)
-      }
-    }
-    
-    console.log('Signature hex length:', sigHex.length)
-    
-    // The Casper Wallet sign() method signs the JSON string, not the deploy hash
-    // This means the signature won't verify against the deploy hash
-    // We need to inform the user that this wallet version doesn't support deploy signing
-    
-    // Try anyway with SDK's setSignature
-    try {
-      const signerKey = CLPublicKey.fromHex(publicKey)
-      
-      // Add algorithm prefix if needed
-      let fullSigHex = sigHex
-      if (sigHex.length === 128) {
-        const keyPrefix = publicKey.substring(0, 2)
-        fullSigHex = keyPrefix + sigHex
-        console.log('Added algorithm prefix:', keyPrefix)
-      }
-      
-      // Convert hex to bytes
-      const sigBytes = new Uint8Array(fullSigHex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)))
-      
-      // Use SDK to set signature
-      const signedDeploy = DeployUtil.setSignature(deploy, sigBytes, signerKey)
-      
-      console.log('Submitting via SDK with setSignature...')
-      const deployHash = await casperClient.putDeploy(signedDeploy)
-      return deployHash
-    } catch (sdkError: any) {
-      console.log('SDK setSignature failed:', sdkError.message)
-      
-      // The signature is over the wrong data (JSON string vs deploy hash)
-      // This is a fundamental limitation of the Casper Wallet extension
-      throw new Error(
-        'Deploy signing failed. The Casper Wallet extension may not support transaction signing. ' +
-        'Please try using CSPR.click with a different wallet (Ledger, Torus, etc.) or the Casper Signer extension.'
-      )
-    }
-  }
-  
-  throw new Error('Wallet returned no signature or deploy. Keys: ' + Object.keys(signResult).join(', '))
+  // Wallet returned only signature - this won't work for deploy signing
+  // The Casper Wallet extension signs the JSON string, not the deploy hash
+  throw new Error(
+    'The Casper Wallet extension does not support transaction signing. ' +
+    'Please install the Casper Signer extension or use CSPR.click with Ledger/Torus.'
+  )
 }
 
 // Issue credential (requires CSPR.click or Casper Wallet extension)
