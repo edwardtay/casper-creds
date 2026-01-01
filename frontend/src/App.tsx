@@ -446,6 +446,8 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }
   const [preview, setPreview] = useState<any[]>([])
   const [imageFile, setImageFile] = useState<File|null>(null)
   const [imagePreview, setImagePreview] = useState<string>('')
+  const [extracting, setExtracting] = useState(false)
+  const extractAbortRef = useRef<AbortController|null>(null)
   const myIssued = credentials.filter(c => c.issuer === pubKey)
   const generateId = () => `CRED-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`
   const contractReady = isContractConfigured()
@@ -458,26 +460,43 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }
         setToast({t:'err', m:'Image must be under 5MB'})
         return
       }
+      
+      // Cancel any pending extraction
+      if (extractAbortRef.current) {
+        extractAbortRef.current.abort()
+        extractAbortRef.current = null
+      }
+      setExtracting(false)
+      
       setImageFile(file)
       const reader = new FileReader()
       reader.onload = async (e) => {
         const base64 = e.target?.result as string
         setImagePreview(base64)
         
-        // Try OCR extraction
+        // Try OCR extraction (with abort support)
         if (file.type.startsWith('image/')) {
-          setToast({t:'ok', m:'🔍 Extracting info with AI...'})
+          const abortController = new AbortController()
+          extractAbortRef.current = abortController
+          setExtracting(true)
+          
           try {
-            const extracted = await extractCredentialInfo(base64)
-            if (extracted) {
+            const extracted = await extractCredentialInfo(base64, abortController.signal)
+            if (extracted && !abortController.signal.aborted) {
               setForm(prev => ({
                 ...prev,
                 ...extracted
               }))
               setToast({t:'ok', m:'✓ Auto-filled from image'})
             }
-          } catch (err) {
-            console.error('OCR failed:', err)
+          } catch (err: any) {
+            if (err.name !== 'AbortError') {
+              console.error('OCR failed:', err)
+            }
+          } finally {
+            if (!abortController.signal.aborted) {
+              setExtracting(false)
+            }
           }
         }
       }
@@ -486,28 +505,36 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }
   }
 
   const clearImage = () => {
+    // Cancel any pending extraction
+    if (extractAbortRef.current) {
+      extractAbortRef.current.abort()
+      extractAbortRef.current = null
+    }
+    setExtracting(false)
     setImageFile(null)
     setImagePreview('')
   }
 
-  // Extract credential info from image using AI
-  const extractCredentialInfo = async (base64Image: string): Promise<Partial<typeof form> | null> => {
+  // Extract credential info from image using AI (with abort support)
+  const extractCredentialInfo = async (base64Image: string, signal: AbortSignal): Promise<Partial<typeof form> | null> => {
     const hfToken = import.meta.env.VITE_HUGGINGFACE_API_KEY
     if (!hfToken) return null
     
     try {
-      // Use HuggingFace's free OCR model
       const imageData = base64Image.split(',')[1]
       
-      // First, try to get text from image using a vision model
+      // Use a faster, lighter model for text extraction
       const ocrResponse = await fetch('https://api-inference.huggingface.co/models/microsoft/trocr-base-printed', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${hfToken}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ inputs: imageData })
+        body: JSON.stringify({ inputs: imageData }),
+        signal
       })
+      
+      if (signal.aborted) return null
       
       let extractedText = ''
       if (ocrResponse.ok) {
@@ -515,63 +542,44 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }
         extractedText = ocrData[0]?.generated_text || ''
       }
       
-      // Parse common credential patterns from the image filename and any extracted text
+      if (signal.aborted) return null
+      
+      // Parse common credential patterns
       const result: Partial<typeof form> = {}
-      const text = (extractedText + ' ' + base64Image).toLowerCase()
+      const text = extractedText.toLowerCase()
       
       // Detect credential type
       if (text.includes('degree') || text.includes('bachelor') || text.includes('master') || text.includes('phd') || text.includes('diploma')) {
         result.type = 'degree'
       } else if (text.includes('certificate') || text.includes('certification') || text.includes('certified')) {
         result.type = 'certificate'
-      } else if (text.includes('license') || text.includes('licensed') || text.includes('licensure')) {
+      } else if (text.includes('license') || text.includes('licensed') || text.includes('licensure') || text.includes('engineer')) {
         result.type = 'license'
       } else if (text.includes('employment') || text.includes('employee') || text.includes('work')) {
         result.type = 'employment'
       }
       
-      // Try to extract name (look for common patterns)
+      // Extract name
       const nameMatch = extractedText.match(/(?:certify that|awarded to|granted to|this is to certify)\s+([A-Z][a-z]+\s+[A-Z][a-z]+)/i)
       if (nameMatch) result.holderName = nameMatch[1]
       
       // Extract institution
-      const instPatterns = [
-        /(?:university|college|institute|school|board|academy)\s+of\s+[\w\s]+/i,
-        /[\w\s]+(?:university|college|institute|board)/i,
-        /state board of [\w\s]+/i
-      ]
+      const instPatterns = [/state board of [\w\s]+/i, /[\w\s]+(?:university|college|institute|board)/i]
       for (const pattern of instPatterns) {
         const match = extractedText.match(pattern)
-        if (match) {
-          result.institution = match[0].trim()
-          break
-        }
+        if (match) { result.institution = match[0].trim(); break }
       }
       
       // Extract title
-      const titlePatterns = [
-        /(?:professional|licensed)\s+[\w\s]+(?:engineer|nurse|doctor|accountant)/i,
-        /(?:bachelor|master|doctor)\s+of\s+[\w\s]+/i,
-        /[\w\s]+certification/i
-      ]
+      const titlePatterns = [/professional\s+[\w]+/i, /(?:bachelor|master)\s+of\s+[\w\s]+/i]
       for (const pattern of titlePatterns) {
         const match = extractedText.match(pattern)
-        if (match) {
-          result.title = match[0].trim()
-          break
-        }
+        if (match) { result.title = match[0].trim(); break }
       }
       
-      // Extract skills from areas of specialization
-      const skillsMatch = extractedText.match(/(?:specialization|skills|areas)[\s:]+([^.]+)/i)
-      if (skillsMatch) result.skills = skillsMatch[1].trim()
-      
-      // Extract grade/status
-      const gradeMatch = extractedText.match(/(?:grade|status|gpa|score)[\s:]+([A-Za-z0-9.+]+)/i)
-      if (gradeMatch) result.grade = gradeMatch[1]
-      
       return Object.keys(result).length > 0 ? result : null
-    } catch (err) {
+    } catch (err: any) {
+      if (err.name === 'AbortError') throw err
       console.error('AI extraction error:', err)
       return null
     }
@@ -711,9 +719,12 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }
               <div className="col-span-2">
                 <label className="block text-sm text-zinc-400 mb-2">Image/Document (AI Auto-Extract + IPFS)</label>
                 {imagePreview ? (
-                  <div className="relative inline-block">
-                    <img src={imagePreview} alt="Preview" className="h-24 rounded-lg border border-zinc-700"/>
-                    <button type="button" onClick={clearImage} className="absolute -top-2 -right-2 w-6 h-6 bg-red-600 rounded-full text-white text-xs">×</button>
+                  <div className="flex items-center gap-3">
+                    <div className="relative inline-block">
+                      <img src={imagePreview} alt="Preview" className="h-24 rounded-lg border border-zinc-700"/>
+                      <button type="button" onClick={clearImage} className="absolute -top-2 -right-2 w-6 h-6 bg-red-600 rounded-full text-white text-xs hover:bg-red-500">×</button>
+                    </div>
+                    {extracting && <div className="flex items-center gap-2 text-sm text-purple-400"><span className="animate-spin">⚙️</span> Extracting...</div>}
                   </div>
                 ) : (
                   <label className="flex items-center justify-center w-full h-24 border-2 border-dashed border-zinc-700 rounded-xl cursor-pointer hover:border-purple-500 transition">
