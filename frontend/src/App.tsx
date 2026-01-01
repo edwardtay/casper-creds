@@ -283,7 +283,7 @@ export default function App() {
       </header>
       {toast && <div className={`fixed top-20 right-6 px-5 py-3 rounded-xl text-sm shadow-2xl z-50 ${toast.t==='err'?'bg-red-950 border border-red-800':'bg-green-950 border border-green-800'}`}>{toast.m} <button onClick={()=>setToast(null)} className="ml-3">×</button></div>}
       <main className="relative max-w-7xl mx-auto px-6 py-8">
-        {role === 'issuer' && <IssuerPortal pubKey={pubKey} credentials={credentials} addCredential={addCredential} setToast={setToast} clickRef={clickRef}/>}
+        {role === 'issuer' && <IssuerPortal pubKey={pubKey} credentials={credentials} addCredential={addCredential} setToast={setToast}/>}
         {role === 'verifier' && <VerifierPortal credentials={credentials} setToast={setToast}/>}
         {role === 'holder' && <HolderPortal pubKey={pubKey} credentials={credentials} setToast={setToast}/>}
       </main>
@@ -439,7 +439,7 @@ function LandingPage({ setRole, chainStats, credentials }: { setRole:(r:Role)=>v
 }
 
 
-function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }: { pubKey:string, credentials:Credential[], addCredential:(c:Credential)=>void, setToast:(t:any)=>void, clickRef:any }) {
+function IssuerPortal({ pubKey, credentials, addCredential, setToast }: { pubKey:string, credentials:Credential[], addCredential:(c:Credential)=>void, setToast:(t:any)=>void }) {
   const [view, setView] = useState<'issue'|'batch'|'history'>('issue')
   const [form, setForm] = useState({ holder:'', type:'degree', title:'', institution:'', startDate:'', expires:'', holderName:'', description:'', grade:'', skills:'', licenseNumber:'', idNumber:'' })
   const [loading, setLoading] = useState(false)
@@ -737,9 +737,17 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }
       }
     }
     
-    // Issue on-chain (requires contract to be configured)
+    // Issue on-chain (requires Casper Wallet extension for signing)
     if (!contractReady) {
       setToast({t:'err', m:'Contract not configured'})
+      setLoading(false)
+      return
+    }
+    
+    // Check for Casper Wallet extension
+    const wallet = (window as any).CasperWalletProvider?.()
+    if (!wallet) {
+      setToast({t:'err', m:'Install Casper Wallet extension to issue credentials'})
       setLoading(false)
       return
     }
@@ -752,8 +760,7 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }
         form.type,
         form.title,
         expiresAt,
-        metadataHash,
-        clickRef // Pass CSPR.click reference for signing
+        metadataHash
       )
       
       if (result) {
