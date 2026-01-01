@@ -130,24 +130,32 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string): Promise<stri
   const deployJson = DeployUtil.deployToJson(deploy)
   
   // Log available wallet methods
-  console.log('Wallet methods:', Object.keys(wallet).filter(k => typeof wallet[k] === 'function'))
+  const methods = Object.getOwnPropertyNames(Object.getPrototypeOf(wallet))
+    .concat(Object.keys(wallet))
+    .filter(k => typeof wallet[k] === 'function')
+  console.log('Wallet methods:', methods)
   
-  // Try signDeploy first (newer API), then sign (older API)
   let signResult: any
   
+  // Try signDeploy first - it should return the full signed deploy
   if (typeof wallet.signDeploy === 'function') {
-    console.log('Using wallet.signDeploy')
-    signResult = await wallet.signDeploy(deployJson, publicKey)
-  } else if (typeof wallet.sign === 'function') {
+    console.log('Using wallet.signDeploy with JSON object')
+    try {
+      signResult = await wallet.signDeploy(deployJson, publicKey)
+      console.log('signDeploy result keys:', Object.keys(signResult || {}))
+    } catch (e: any) {
+      console.log('signDeploy failed:', e.message)
+      // Fall back to sign
+      const deployJsonStr = JSON.stringify(deployJson)
+      signResult = await wallet.sign(deployJsonStr, publicKey)
+    }
+  } else {
     console.log('Using wallet.sign')
     const deployJsonStr = JSON.stringify(deployJson)
     signResult = await wallet.sign(deployJsonStr, publicKey)
-  } else {
-    throw new Error('Wallet has no sign or signDeploy method')
   }
   
-  // Debug: log what wallet returns
-  console.log('Wallet sign result:', JSON.stringify(signResult, null, 2))
+  console.log('Sign result keys:', Object.keys(signResult || {}))
   
   if (signResult.cancelled) throw new Error('User cancelled signing')
   
