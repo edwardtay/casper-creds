@@ -1,11 +1,10 @@
 /// <reference types="vite/client" />
 import { CasperClient, CLPublicKey, DeployUtil, RuntimeArgs, CLValueBuilder, Contracts } from 'casper-js-sdk'
 
-const RPC_URL = import.meta.env.VITE_CASPER_RPC || 'https://node.testnet.casper.network/rpc'
 const CONTRACT_HASH = import.meta.env.VITE_CONTRACT_HASH || ''
 const CHAIN_NAME = import.meta.env.VITE_CASPER_NETWORK || 'casper-test'
 
-// Use proxy in development to avoid CORS
+// Use proxy to avoid CORS
 const getRpcUrl = () => {
   if (import.meta.env.DEV) {
     return '/casper-rpc' // Vite proxy
@@ -14,8 +13,8 @@ const getRpcUrl = () => {
   return '/api/rpc'
 }
 
-// Initialize Casper client
-const casperClient = new CasperClient(RPC_URL)
+// Initialize Casper client with proxy URL to avoid CORS
+const casperClient = new CasperClient(getRpcUrl())
 const contractClient = new Contracts.Contract(casperClient)
 
 // Set contract hash if available
