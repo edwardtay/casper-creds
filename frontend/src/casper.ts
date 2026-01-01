@@ -38,11 +38,12 @@ export interface OnChainCredential {
 
 export interface VerificationResult {
   isValid: boolean
-  status: number // 0=valid, 1=revoked, 2=expired, 3=issuer_inactive
+  status: number
   credential: OnChainCredential
   issuerName: string
   issuerActive: boolean
 }
+
 
 // Get total credentials count from contract
 export async function getTotalCredentials(): Promise<number> {
@@ -60,16 +61,8 @@ export async function getTotalCredentials(): Promise<number> {
 export async function verifyCredentialOnChain(credentialId: number): Promise<VerificationResult | null> {
   try {
     if (!CONTRACT_HASH) return null
-    
-    // Query the credential directly from contract storage
-    const credential = await contractClient.queryContractDictionary(
-      'credentials',
-      credentialId.toString()
-    )
-    
+    const credential = await contractClient.queryContractDictionary('credentials', credentialId.toString())
     if (!credential) return null
-
-    // Parse the credential data
     const data = credential.data as any
     return {
       isValid: !data.revoked && (data.expires_at === 0 || Date.now() < data.expires_at),
@@ -99,14 +92,8 @@ export async function verifyCredentialOnChain(credentialId: number): Promise<Ver
 export async function getCredentialFromChain(credentialId: number): Promise<OnChainCredential | null> {
   try {
     if (!CONTRACT_HASH) return null
-    
-    const credential = await contractClient.queryContractDictionary(
-      'credentials',
-      credentialId.toString()
-    )
-    
+    const credential = await contractClient.queryContractDictionary('credentials', credentialId.toString())
     if (!credential) return null
-    
     const data = credential.data as any
     return {
       id: credentialId.toString(),
@@ -124,6 +111,62 @@ export async function getCredentialFromChain(credentialId: number): Promise<OnCh
     console.error('Error getting credential:', e)
     return null
   }
+}
+
+
+// Helper to sign and submit deploy via Casper Wallet
+async function signAndSubmitDeploy(deploy: any, publicKey: string): Promise<string> {
+  const CasperWalletProvider = (window as any).CasperWalletProvider
+  if (!CasperWalletProvider) {
+    throw new Error('Casper Wallet extension not found. Please install it from casper.network')
+  }
+  
+  const wallet = CasperWalletProvider()
+  const isConnected = await wallet.isConnected()
+  if (!isConnected) {
+    await wallet.requestConnection()
+  }
+  
+  const deployJson = DeployUtil.deployToJson(deploy)
+  const deployJsonStr = JSON.stringify(deployJson)
+  const signResult = await wallet.sign(deployJsonStr, publicKey)
+  
+  if (signResult.cancelled) throw new Error('User cancelled signing')
+  
+  // The wallet should return a signedDeploy in the response
+  // Try different response formats
+  let signedDeploy: any
+  
+  if (signResult.deploy) {
+    // Wallet returned signed deploy directly
+    const signedDeployJson = typeof signResult.deploy === 'string' 
+      ? JSON.parse(signResult.deploy) 
+      : signResult.deploy
+    const result = DeployUtil.deployFromJson(signedDeployJson)
+    if (result.err) throw new Error('Failed to parse signed deploy')
+    signedDeploy = result.val
+  } else if (signResult.signature) {
+    // Wallet returned just signature - need to construct signed deploy manually
+    // The signature includes the algorithm prefix (01 for ed25519, 02 for secp256k1)
+    const sigHex = signResult.signature.startsWith('0x') 
+      ? signResult.signature.slice(2) 
+      : signResult.signature
+    
+    // Create approval and add to deploy
+    const signerKey = CLPublicKey.fromHex(publicKey)
+    const approval = new DeployUtil.Approval()
+    approval.signer = signerKey.toAccountHashStr()
+    approval.signature = sigHex
+    
+    // Clone deploy with approval
+    signedDeploy = DeployUtil.deployFromJson(deployJson).val
+    signedDeploy.approvals = [{ signer: publicKey, signature: sigHex }]
+  } else {
+    throw new Error('Wallet returned no signature or deploy')
+  }
+  
+  const deployHash = await casperClient.putDeploy(signedDeploy)
+  return deployHash
 }
 
 // Issue credential (requires Casper Wallet extension)
@@ -157,54 +200,8 @@ export async function issueCredential(
       '5000000000' // 5 CSPR gas
     )
 
-    const deployJson = DeployUtil.deployToJson(deploy)
-    
-    // Try Casper Wallet extension
-    const CasperWalletProvider = (window as any).CasperWalletProvider
-    if (CasperWalletProvider) {
-      const wallet = CasperWalletProvider()
-      
-      // Check connection
-      const isConnected = await wallet.isConnected()
-      if (!isConnected) {
-        await wallet.requestConnection()
-      }
-      
-      // Casper Wallet sign() returns signature, not signed deploy
-      // We need to apply the signature to the deploy ourselves
-      const deployJsonStr = JSON.stringify(deployJson)
-      const signResult = await wallet.sign(deployJsonStr, issuerPublicKey)
-      
-      if (signResult.cancelled) throw new Error('User cancelled signing')
-      
-      // The wallet returns a signature - we need to add it to the deploy
-      let signedDeploy: any
-      
-      if (signResult.signature) {
-        // Apply signature to original deploy
-        const sig = signResult.signature
-        signedDeploy = DeployUtil.setSignature(
-          deploy,
-          sig,
-          issuerKey
-        )
-      } else if (signResult.deploy) {
-        // Some wallet versions return the full signed deploy
-        const signedDeployJson = typeof signResult.deploy === 'string' 
-          ? JSON.parse(signResult.deploy) 
-          : signResult.deploy
-        const signedDeployResult = DeployUtil.deployFromJson(signedDeployJson)
-        if (signedDeployResult.err) throw new Error('Failed to parse signed deploy')
-        signedDeploy = signedDeployResult.val
-      } else {
-        throw new Error('Wallet returned no signature or deploy')
-      }
-      
-      const result = await casperClient.putDeploy(signedDeploy)
-      return { deployHash: result }
-    }
-    
-    throw new Error('Casper Wallet extension not found. Please install it from casper.network')
+    const deployHash = await signAndSubmitDeploy(deploy, issuerPublicKey)
+    return { deployHash }
   } catch (e: any) {
     console.error('Error issuing credential:', e)
     throw e
@@ -235,51 +232,16 @@ export async function revokeCredential(
       '3000000000' // 3 CSPR gas
     )
 
-    const deployJson = DeployUtil.deployToJson(deploy)
-    
-    // Try Casper Wallet extension
-    const CasperWalletProvider = (window as any).CasperWalletProvider
-    if (CasperWalletProvider) {
-      const wallet = CasperWalletProvider()
-      
-      // Check connection
-      const isConnected = await wallet.isConnected()
-      if (!isConnected) {
-        await wallet.requestConnection()
-      }
-      
-      const deployJsonStr = JSON.stringify(deployJson)
-      const signResult = await wallet.sign(deployJsonStr, issuerPublicKey)
-      
-      if (signResult.cancelled) throw new Error('User cancelled signing')
-      
-      let signedDeploy: any
-      
-      if (signResult.signature) {
-        signedDeploy = DeployUtil.setSignature(deploy, signResult.signature, issuerKey)
-      } else if (signResult.deploy) {
-        const signedDeployJson = typeof signResult.deploy === 'string' 
-          ? JSON.parse(signResult.deploy) 
-          : signResult.deploy
-        const signedDeployResult = DeployUtil.deployFromJson(signedDeployJson)
-        if (signedDeployResult.err) throw new Error('Failed to parse signed deploy')
-        signedDeploy = signedDeployResult.val
-      } else {
-        throw new Error('Wallet returned no signature or deploy')
-      }
-      
-      const result = await casperClient.putDeploy(signedDeploy)
-      return { deployHash: result }
-    }
-    
-    throw new Error('Casper Wallet extension not found. Please install it from casper.network')
+    const deployHash = await signAndSubmitDeploy(deploy, issuerPublicKey)
+    return { deployHash }
   } catch (e: any) {
     console.error('Error revoking credential:', e)
     throw e
   }
 }
 
-// Get chain stats - using proxy in dev to avoid CORS
+
+// Get chain stats
 export async function getChainStats() {
   try {
     const rpcUrl = getRpcUrl()
@@ -306,16 +268,13 @@ export async function getChainStats() {
   } catch (e) {
     console.error('Error getting chain stats:', e)
   }
-  
   return null
 }
 
-// Check if contract is configured
 export function isContractConfigured(): boolean {
   return !!CONTRACT_HASH
 }
 
-// Get contract hash
 export function getContractHash(): string {
   return CONTRACT_HASH
 }
@@ -323,7 +282,6 @@ export function getContractHash(): string {
 // Wait for deploy to be processed
 export async function waitForDeploy(deployHash: string, timeoutMs = 120000): Promise<boolean> {
   const startTime = Date.now()
-  
   while (Date.now() - startTime < timeoutMs) {
     try {
       const result = await casperClient.getDeploy(deployHash)
@@ -334,12 +292,10 @@ export async function waitForDeploy(deployHash: string, timeoutMs = 120000): Pro
     } catch (e) {
       // Deploy not found yet, keep waiting
     }
-    await new Promise(r => setTimeout(r, 5000)) // Check every 5 seconds
+    await new Promise(r => setTimeout(r, 5000))
   }
-  
   return false
 }
-
 
 // ==================== IPFS FUNCTIONS ====================
 
@@ -365,9 +321,7 @@ export interface CredentialMetadata {
   idNumber?: string
 }
 
-// Upload metadata to IPFS via Pinata (if configured) or return mock hash
 export async function uploadToIPFS(metadata: CredentialMetadata): Promise<string> {
-  // If Pinata is configured, use it
   if (PINATA_API_KEY && PINATA_SECRET) {
     try {
       const response = await fetch('https://api.pinata.cloud/pinning/pinJSONToIPFS', {
@@ -379,22 +333,18 @@ export async function uploadToIPFS(metadata: CredentialMetadata): Promise<string
         },
         body: JSON.stringify({
           pinataContent: metadata,
-          pinataMetadata: {
-            name: `credential-${metadata.title}-${Date.now()}`
-          }
+          pinataMetadata: { name: `credential-${metadata.title}-${Date.now()}` }
         })
       })
-      
       if (response.ok) {
         const data = await response.json()
-        return data.IpfsHash // Returns CID like "QmXyz..."
+        return data.IpfsHash
       }
     } catch (e) {
       console.error('Pinata upload failed:', e)
     }
   }
-  
-  // Fallback: Generate a deterministic hash from metadata (mock IPFS)
+  // Fallback mock hash
   const content = JSON.stringify(metadata)
   let hash = 0
   for (let i = 0; i < content.length; i++) {
@@ -404,18 +354,13 @@ export async function uploadToIPFS(metadata: CredentialMetadata): Promise<string
   return `Qm${Math.abs(hash).toString(16).padStart(44, '0')}`
 }
 
-// Upload image/file to IPFS via Pinata (privacy-preserving)
 export async function uploadImageToIPFS(file: File): Promise<string> {
   if (!PINATA_API_KEY || !PINATA_SECRET) {
     throw new Error('IPFS not configured')
   }
-  
   const formData = new FormData()
   formData.append('file', file)
-  formData.append('pinataMetadata', JSON.stringify({
-    name: `credential-image-${Date.now()}`
-  }))
-  
+  formData.append('pinataMetadata', JSON.stringify({ name: `credential-image-${Date.now()}` }))
   const response = await fetch('https://api.pinata.cloud/pinning/pinFileToIPFS', {
     method: 'POST',
     headers: {
@@ -424,31 +369,22 @@ export async function uploadImageToIPFS(file: File): Promise<string> {
     },
     body: formData
   })
-  
-  if (!response.ok) {
-    throw new Error('Failed to upload image to IPFS')
-  }
-  
+  if (!response.ok) throw new Error('Failed to upload image to IPFS')
   const data = await response.json()
   return data.IpfsHash
 }
 
-// Fetch metadata from IPFS
 export async function fetchFromIPFS(cid: string): Promise<CredentialMetadata | null> {
-  if (!cid || cid.startsWith('Qm0')) return null // Skip mock hashes
-  
+  if (!cid || cid.startsWith('Qm0')) return null
   try {
     const response = await fetch(`${IPFS_GATEWAY}${cid}`)
-    if (response.ok) {
-      return await response.json()
-    }
+    if (response.ok) return await response.json()
   } catch (e) {
     console.error('IPFS fetch failed:', e)
   }
   return null
 }
 
-// Check if IPFS is configured (Pinata)
 export function isIPFSConfigured(): boolean {
   return !!(PINATA_API_KEY && PINATA_SECRET)
 }
