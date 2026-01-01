@@ -218,8 +218,12 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string, clickRef?: an
   const walletMethods = Object.keys(wallet).filter(k => typeof wallet[k] === 'function')
   console.log('Wallet methods:', walletMethods)
 
+  // Verify Chain Name
+  if (deploy.header.chainName !== CHAIN_NAME) {
+    console.warn(`Deploy chain name (${deploy.header.chainName}) does not match env (${CHAIN_NAME})`)
+  }
+
   // Clean deploy JSON for signing: remove the outer "deploy" wrapper if present
-  // The SDK's deployToJson returns { deploy: { ... } } but wallet expects just { ... }
   const rawDeploy = (deployJson as any).deploy || deployJson
   const deployJsonStr = JSON.stringify(rawDeploy)
   console.log('Signing raw deploy JSON:', deployJsonStr)
@@ -240,21 +244,17 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string, clickRef?: an
 
   // If wallet returns a signed deploy (legacy behavior or specific wallets)
   if (signResult.deploy) {
-    console.log('Wallet returned signed deploy')
+    // ... existing logic for signed deploy return ...
+    console.log('Wallet returned full deploy, using it.')
     const signedDeployJson = typeof signResult.deploy === 'string'
       ? JSON.parse(signResult.deploy)
       : signResult.deploy
 
-    // Normalize: SDK expects { deploy: ... } struct usually, but let's handle both
-    // If it has approvals, it's the inner object
     const deployObj = signedDeployJson.deploy || signedDeployJson
-
-    // SDK check
     try {
       const result = DeployUtil.deployFromJson(deployObj)
       if (!result.err) {
-        const hash = await casperClient.putDeploy(result.val)
-        return hash
+        return await casperClient.putDeploy(result.val)
       }
     } catch (e) { console.warn('SDK check failed', e) }
 
@@ -271,11 +271,8 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string, clickRef?: an
       })
     })
     const rpcResult = await rpcResponse.json()
-    if (rpcResult.result?.deploy_hash) {
-      return rpcResult.result.deploy_hash
-    } else if (rpcResult.error) {
-      throw new Error(rpcResult.error.message)
-    }
+    if (rpcResult.result?.deploy_hash) return rpcResult.result.deploy_hash
+    if (rpcResult.error) throw new Error(rpcResult.error.message)
   }
 
   // If wallet returned only signature (standard behavior for signDeploy)
