@@ -189,11 +189,16 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string): Promise<stri
     console.log('Signature hex (first 20 chars):', sigHex.substring(0, 20))
     console.log('Signature hex length:', sigHex.length)
     
-    // Ed25519 signatures need 01 prefix
+    // Check if signature already has algorithm prefix
+    // Ed25519 keys start with 01, secp256k1 start with 02
     let fullSigHex = sigHex
     if (sigHex.length === 128) {
-      fullSigHex = '01' + sigHex
+      // Use public key prefix to determine algorithm
+      const keyPrefix = publicKey.substring(0, 2)
+      fullSigHex = keyPrefix + sigHex
+      console.log('Added algorithm prefix from pubkey:', keyPrefix)
     }
+    console.log('Final signature length:', fullSigHex.length)
     
     // Reconstruct deploy and add approval directly to JSON
     // This avoids SDK serialization issues
