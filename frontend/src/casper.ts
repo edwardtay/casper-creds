@@ -157,9 +157,15 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string): Promise<stri
       throw new Error('Unknown signature format')
     }
     
-    // Clone deploy and add approval
-    signedDeploy = DeployUtil.deployFromJson(deployJson).val
-    signedDeploy.approvals = [{ signer: publicKey, signature: sigHex }]
+    // Reconstruct deploy from JSON and add approval in correct format
+    const deployResult = DeployUtil.deployFromJson(deployJson)
+    if (deployResult.err) throw new Error('Failed to reconstruct deploy')
+    signedDeploy = deployResult.val
+    
+    // Use SDK's setSignature to properly add the approval
+    const signerKey = CLPublicKey.fromHex(publicKey)
+    const sigBytes = Uint8Array.from(sigHex.match(/.{2}/g)!.map(byte => parseInt(byte, 16)))
+    signedDeploy = DeployUtil.setSignature(signedDeploy, sigBytes, signerKey)
   } else {
     throw new Error('Wallet returned no signature or deploy')
   }
