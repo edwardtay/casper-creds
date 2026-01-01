@@ -173,9 +173,16 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string): Promise<stri
     // Try using setSignature if available, otherwise manually add approval
     const signerKey = CLPublicKey.fromHex(publicKey)
     try {
-      const sigBytes = Uint8Array.from(sigHex.match(/.{2}/g)!.map(byte => parseInt(byte, 16)))
+      // Ed25519 signatures need 01 prefix, secp256k1 need 02
+      // Check if signature already has prefix by length (65 bytes = prefixed, 64 = raw)
+      let fullSigHex = sigHex
+      if (sigHex.length === 128) {
+        // Raw 64-byte signature, add ed25519 prefix
+        fullSigHex = '01' + sigHex
+      }
+      const sigBytes = Uint8Array.from(fullSigHex.match(/.{2}/g)!.map(byte => parseInt(byte, 16)))
       signedDeploy = DeployUtil.setSignature(signedDeploy, sigBytes, signerKey)
-      console.log('Used DeployUtil.setSignature')
+      console.log('Used DeployUtil.setSignature with prefix, length:', fullSigHex.length)
     } catch (e) {
       console.log('setSignature failed, trying manual approval:', e)
       // Manual approval format
