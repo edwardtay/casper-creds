@@ -10,7 +10,8 @@ const getRpcUrl = () => {
   if (import.meta.env.DEV) {
     return '/casper-rpc' // Vite proxy
   }
-  return RPC_URL
+  // In production (Vercel), use our serverless function proxy
+  return '/api/rpc'
 }
 
 // Initialize Casper client
