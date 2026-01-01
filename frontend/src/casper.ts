@@ -132,9 +132,7 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string): Promise<stri
   const signResult = await wallet.sign(deployJsonStr, publicKey)
   
   // Debug: log what wallet returns
-  console.log('Wallet sign result keys:', Object.keys(signResult))
-  console.log('signResult.deploy:', signResult.deploy ? 'present' : 'absent')
-  console.log('signResult.signature:', signResult.signature ? typeof signResult.signature : 'absent')
+  console.log('Wallet sign result:', JSON.stringify(signResult, null, 2))
   
   if (signResult.cancelled) throw new Error('User cancelled signing')
   
@@ -142,14 +140,16 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string): Promise<stri
   
   if (signResult.deploy) {
     // Wallet returned signed deploy directly
+    console.log('Using signResult.deploy')
     const signedDeployJson = typeof signResult.deploy === 'string' 
       ? JSON.parse(signResult.deploy) 
       : signResult.deploy
     const result = DeployUtil.deployFromJson(signedDeployJson)
-    if (result.err) throw new Error('Failed to parse signed deploy')
+    if (result.err) throw new Error('Failed to parse signed deploy: ' + result.err)
     signedDeploy = result.val
   } else if (signResult.signature) {
     // Wallet returned just signature - convert to hex string if needed
+    console.log('Using signResult.signature, type:', typeof signResult.signature)
     let sigHex: string
     const sig = signResult.signature
     if (typeof sig === 'string') {
@@ -162,21 +162,33 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string): Promise<stri
       throw new Error('Unknown signature format: ' + typeof sig)
     }
     
+    console.log('Signature hex (first 20 chars):', sigHex.substring(0, 20))
     console.log('Signature hex length:', sigHex.length)
     
-    // Reconstruct deploy from JSON and add approval in correct format
+    // Reconstruct deploy and manually add approval
     const deployResult = DeployUtil.deployFromJson(deployJson)
     if (deployResult.err) throw new Error('Failed to reconstruct deploy')
     signedDeploy = deployResult.val
     
-    // Use SDK's setSignature to properly add the approval
+    // Try using setSignature if available, otherwise manually add approval
     const signerKey = CLPublicKey.fromHex(publicKey)
-    const sigBytes = Uint8Array.from(sigHex.match(/.{2}/g)!.map(byte => parseInt(byte, 16)))
-    signedDeploy = DeployUtil.setSignature(signedDeploy, sigBytes, signerKey)
+    try {
+      const sigBytes = Uint8Array.from(sigHex.match(/.{2}/g)!.map(byte => parseInt(byte, 16)))
+      signedDeploy = DeployUtil.setSignature(signedDeploy, sigBytes, signerKey)
+      console.log('Used DeployUtil.setSignature')
+    } catch (e) {
+      console.log('setSignature failed, trying manual approval:', e)
+      // Manual approval format
+      signedDeploy.approvals.push({
+        signer: publicKey,
+        signature: '01' + sigHex // 01 prefix for ed25519
+      })
+    }
   } else {
     throw new Error('Wallet returned no signature or deploy. Keys: ' + Object.keys(signResult).join(', '))
   }
   
+  console.log('Submitting deploy with approvals:', signedDeploy.approvals?.length)
   const deployHash = await casperClient.putDeploy(signedDeploy)
   return deployHash
 }
