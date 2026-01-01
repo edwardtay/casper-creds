@@ -822,7 +822,7 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2"><label className="block text-sm text-zinc-400 mb-2">Type *</label><select value={form.type} onChange={e=>setForm({...form,type:e.target.value})} className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700"><option value="degree">🎓 Degree</option><option value="certificate">📜 Certificate</option><option value="license">📋 License</option><option value="employment">💼 Employment</option><option value="identity">🪪 Identity</option></select></div>
               <div className="col-span-2">
-                <label className="block text-sm text-zinc-400 mb-2">Image/Document (AI Auto-Extract + IPFS)</label>
+                <label className="block text-sm text-zinc-400 mb-2">Document Image</label>
                 {imagePreview ? (
                   <div className="flex items-center gap-3">
                     <div className="relative inline-block group">
@@ -837,9 +837,8 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }
                 ) : (
                   <label className="flex items-center justify-center w-full h-20 border-2 border-dashed border-zinc-700 rounded-xl cursor-pointer hover:border-purple-500 transition">
                     <div className="text-center">
-                      <span className="text-2xl">🤖</span>
-                      <p className="text-xs text-zinc-400 mt-1">Upload credential → AI auto-fills form</p>
-                      <p className="text-xs text-zinc-600">OCR extracts name, title, institution, dates</p>
+                      <span className="text-2xl">📄</span>
+                      <p className="text-xs text-zinc-500 mt-1">Drop image or click to upload</p>
                     </div>
                     <input type="file" accept="image/*,.pdf" onChange={handleImageChange} className="hidden"/>
                   </label>
