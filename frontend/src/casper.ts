@@ -129,11 +129,12 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string): Promise<stri
   
   const deployJson = DeployUtil.deployToJson(deploy)
   
-  // Log available wallet methods
-  const methods = Object.getOwnPropertyNames(Object.getPrototypeOf(wallet))
-    .concat(Object.keys(wallet))
-    .filter(k => typeof wallet[k] === 'function')
-  console.log('Wallet methods:', methods)
+  // The wallet.sign() method signs a message, but for deploys we need to sign the deploy hash
+  // Try passing the deploy hash directly instead of the full JSON
+  const deployHashBytes = deploy.hash as Uint8Array
+  const deployHashHex = Array.from(deployHashBytes).map(b => b.toString(16).padStart(2, '0')).join('')
+  
+  console.log('Deploy hash to sign:', deployHashHex)
   
   let signResult: any
   
@@ -145,14 +146,13 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string): Promise<stri
       console.log('signDeploy result keys:', Object.keys(signResult || {}))
     } catch (e: any) {
       console.log('signDeploy failed:', e.message)
-      // Fall back to sign
-      const deployJsonStr = JSON.stringify(deployJson)
-      signResult = await wallet.sign(deployJsonStr, publicKey)
+      // Fall back to sign with deploy hash
+      signResult = await wallet.sign(deployHashHex, publicKey)
     }
   } else {
-    console.log('Using wallet.sign')
-    const deployJsonStr = JSON.stringify(deployJson)
-    signResult = await wallet.sign(deployJsonStr, publicKey)
+    // Sign the deploy hash, not the full JSON
+    console.log('Using wallet.sign with deploy hash')
+    signResult = await wallet.sign(deployHashHex, publicKey)
   }
   
   console.log('Sign result keys:', Object.keys(signResult || {}))
