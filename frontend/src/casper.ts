@@ -205,37 +205,50 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string, clickRef?: an
     try {
       const signResult = await wallet.signMessage(deployHashHex, publicKey)
       console.log('signMessage result:', signResult)
-      if (signResult && !signResult.cancelled && (signResult.signatureHex || signResult.signature)) {
-        // Process signature...
+      if (signResult && !signResult.cancelled) {
+        // Get signature hex
         let sigHex = signResult.signatureHex || ''
         if (!sigHex && signResult.signature) {
           const sig = signResult.signature
           if (typeof sig === 'string') {
             sigHex = sig
+          } else if (sig instanceof Uint8Array) {
+            sigHex = Array.from(sig).map(b => b.toString(16).padStart(2, '0')).join('')
           } else if (Array.isArray(sig)) {
             sigHex = sig.map((b: number) => b.toString(16).padStart(2, '0')).join('')
           }
         }
         if (sigHex.startsWith('0x')) sigHex = sigHex.slice(2)
         
-        // Add algorithm prefix
-        let fullSigHex = sigHex
-        if (sigHex.length === 128) {
-          const keyPrefix = publicKey.substring(0, 2)
-          fullSigHex = keyPrefix + sigHex
-        }
+        console.log('Got signature hex, length:', sigHex.length)
         
-        // Add approval to deploy JSON
-        const signedDeployJson = JSON.parse(JSON.stringify(deployJson))
-        signedDeployJson.deploy.approvals = [{
-          signer: publicKey,
-          signature: fullSigHex
-        }]
-        
-        const deployResult = DeployUtil.deployFromJson(signedDeployJson)
-        if (!deployResult.err) {
-          const hash = await casperClient.putDeploy(deployResult.val)
-          return hash
+        if (sigHex.length >= 128) {
+          // Add algorithm prefix if needed
+          let fullSigHex = sigHex
+          if (sigHex.length === 128) {
+            const keyPrefix = publicKey.substring(0, 2)
+            fullSigHex = keyPrefix + sigHex
+            console.log('Added prefix:', keyPrefix, 'final length:', fullSigHex.length)
+          }
+          
+          // Add approval to deploy JSON
+          const signedDeployJson = JSON.parse(JSON.stringify(deployJson))
+          signedDeployJson.deploy.approvals = [{
+            signer: publicKey,
+            signature: fullSigHex
+          }]
+          
+          console.log('Created signed deploy JSON with approval')
+          
+          const deployResult = DeployUtil.deployFromJson(signedDeployJson)
+          if (deployResult.err) {
+            console.log('deployFromJson error:', deployResult.err)
+          } else {
+            console.log('Submitting signed deploy...')
+            const hash = await casperClient.putDeploy(deployResult.val)
+            console.log('Deploy submitted! Hash:', hash)
+            return hash
+          }
         }
       }
     } catch (e: any) {
