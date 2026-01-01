@@ -117,17 +117,17 @@ export async function getCredentialFromChain(credentialId: number): Promise<OnCh
 // Helper to sign and submit deploy via CSPR.click or Casper Wallet
 async function signAndSubmitDeploy(deploy: any, publicKey: string, clickRef?: any): Promise<string> {
   const deployJson = DeployUtil.deployToJson(deploy)
-  
+
   // Try to get CSPR.click SDK from window if not passed
   const sdk = clickRef || (window as any).csprclick
   console.log('signAndSubmitDeploy - clickRef passed:', !!clickRef, 'window.csprclick:', !!(window as any).csprclick)
-  
+
   // CSPR.click is the preferred method - it handles signing properly
   if (sdk && typeof sdk.send === 'function') {
     console.log('Using CSPR.click SDK')
     const methods = Object.keys(sdk).filter(k => typeof sdk[k] === 'function')
     console.log('CSPR.click available methods:', methods)
-    
+
     // Try send() - this is the main method for sending deploys
     console.log('Using CSPR.click send()')
     try {
@@ -145,7 +145,7 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string, clickRef?: an
       if (e.message === 'User cancelled signing') throw e
       // Otherwise continue to try other methods
     }
-    
+
     // Try sign() to get signed deploy back
     if (typeof sdk.sign === 'function') {
       console.log('Using CSPR.click sign()')
@@ -169,16 +169,16 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string, clickRef?: an
         if (e.message === 'User cancelled signing') throw e
       }
     }
-    
+
     // If we got here, CSPR.click methods didn't return a hash
     throw new Error('CSPR.click signing failed. Please try reconnecting your wallet.')
   }
-  
+
   // If CSPR.click SDK is available but send() isn't, something is wrong
   if (sdk) {
     console.log('CSPR.click SDK found but send() method missing')
   }
-  
+
   // Try Casper Signer (legacy extension) first - it properly signs deploys
   const CasperSigner = (window as any).casperlabsHelper
   if (CasperSigner) {
@@ -200,47 +200,54 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string, clickRef?: an
       console.log('Casper Signer failed:', e.message)
     }
   }
-  
+
   // Fallback to Casper Wallet extension
   const CasperWalletProvider = (window as any).CasperWalletProvider
   if (!CasperWalletProvider) {
     throw new Error('No wallet available. Please install Casper Wallet or Casper Signer extension.')
   }
-  
+
   const wallet = CasperWalletProvider()
   const isConnected = await wallet.isConnected()
   if (!isConnected) {
     await wallet.requestConnection()
   }
-  
+
   console.log('Using Casper Wallet extension')
+  // Log available methods for debugging
   const walletMethods = Object.keys(wallet).filter(k => typeof wallet[k] === 'function')
   console.log('Wallet methods:', walletMethods)
-  
+
   const deployJsonStr = JSON.stringify(deployJson)
-  
-  // Use wallet.sign() - note: this may not work for deploy signing
-  console.log('Calling wallet.sign()')
-  const signResult = await wallet.sign(deployJsonStr, publicKey)
-  
+
+  // Use signDeploy if available (preferred for newer wallet), otherwise sign
+  let signResult
+  if (typeof wallet.signDeploy === 'function') {
+    console.log('Calling wallet.signDeploy()')
+    signResult = await wallet.signDeploy(deployJsonStr, publicKey)
+  } else {
+    console.log('Calling wallet.sign()')
+    signResult = await wallet.sign(deployJsonStr, publicKey)
+  }
+
   console.log('Sign result keys:', Object.keys(signResult || {}))
-  
+
   if (signResult.cancelled) throw new Error('User cancelled signing')
-  
-  // If wallet returns a signed deploy, use it
+
+  // If wallet returns a signed deploy (legacy behavior or specific wallets)
   if (signResult.deploy) {
     console.log('Wallet returned signed deploy')
-    const signedDeployJson = typeof signResult.deploy === 'string' 
-      ? JSON.parse(signResult.deploy) 
+    const signedDeployJson = typeof signResult.deploy === 'string'
+      ? JSON.parse(signResult.deploy)
       : signResult.deploy
-    
+
     const result = DeployUtil.deployFromJson(signedDeployJson)
     if (!result.err) {
       const hash = await casperClient.putDeploy(result.val)
       return hash
     }
-    
-    // Try RPC directly
+
+    // Try RPC directly via proxy
     const rpcUrl = getRpcUrl()
     const rpcResponse = await fetch(rpcUrl, {
       method: 'POST',
@@ -255,15 +262,37 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string, clickRef?: an
     const rpcResult = await rpcResponse.json()
     if (rpcResult.result?.deploy_hash) {
       return rpcResult.result.deploy_hash
+    } else if (rpcResult.error) {
+      throw new Error(rpcResult.error.message)
     }
   }
-  
-  // Wallet returned only signature - this won't work for deploy signing
-  // The Casper Wallet extension signs the JSON string, not the deploy hash
-  throw new Error(
-    'The Casper Wallet extension does not support transaction signing. ' +
-    'Please install the Casper Signer extension or use CSPR.click with Ledger/Torus.'
-  )
+
+  // If wallet returned only signature (standard behavior for signDeploy)
+  if (signResult.signature) {
+    console.log('Wallet returned signature, attaching to deploy...')
+    const signedDeployJson = JSON.parse(JSON.stringify(deployJson))
+
+    // Ensure approvals array exists
+    if (!signedDeployJson.approvals) {
+      signedDeployJson.approvals = []
+    }
+
+    // Add the signature
+    signedDeployJson.approvals.push({
+      signer: publicKey,
+      signature: signResult.signature
+    })
+
+    const result = DeployUtil.deployFromJson(signedDeployJson)
+    if (!result.err) {
+      const hash = await casperClient.putDeploy(result.val)
+      return hash
+    } else {
+      throw new Error('Failed to create signed deploy from signature: ' + result.err)
+    }
+  }
+
+  throw new Error('Wallet signing failed: No signature or deploy returned.')
 }
 
 // Issue credential (requires CSPR.click or Casper Wallet extension)
@@ -278,10 +307,10 @@ export async function issueCredential(
 ): Promise<{ deployHash: string } | null> {
   try {
     if (!CONTRACT_HASH) throw new Error('Contract not configured')
-    
+
     const issuerKey = CLPublicKey.fromHex(issuerPublicKey)
     const holderKey = CLPublicKey.fromHex(holderPublicKey)
-    
+
     const args = RuntimeArgs.fromMap({
       holder: holderKey,
       credential_type: CLValueBuilder.string(credentialType),
@@ -315,9 +344,9 @@ export async function revokeCredential(
 ): Promise<{ deployHash: string } | null> {
   try {
     if (!CONTRACT_HASH) throw new Error('Contract not configured')
-    
+
     const issuerKey = CLPublicKey.fromHex(issuerPublicKey)
-    
+
     const args = RuntimeArgs.fromMap({
       id: CLValueBuilder.u256(credentialId),
       reason: CLValueBuilder.string(reason)
