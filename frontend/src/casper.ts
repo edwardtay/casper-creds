@@ -272,23 +272,48 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string, clickRef?: an
     console.log('Wallet returned signature, attaching to deploy...')
     const signedDeployJson = JSON.parse(JSON.stringify(deployJson))
 
+    // Normalize deploy object - check if wrapped in { deploy: ... }
+    const deployObj = signedDeployJson.deploy || signedDeployJson
+
     // Ensure approvals array exists
-    if (!signedDeployJson.approvals) {
-      signedDeployJson.approvals = []
+    if (!deployObj.approvals) {
+      deployObj.approvals = []
     }
 
     // Add the signature
-    signedDeployJson.approvals.push({
+    deployObj.approvals.push({
       signer: publicKey,
       signature: signResult.signature
     })
 
-    const result = DeployUtil.deployFromJson(signedDeployJson)
-    if (!result.err) {
-      const hash = await casperClient.putDeploy(result.val)
-      return hash
-    } else {
-      throw new Error('Failed to create signed deploy from signature: ' + result.err)
+    // Try via SDK first
+    try {
+      const result = DeployUtil.deployFromJson(signedDeployJson)
+      if (!result.err) {
+        const hash = await casperClient.putDeploy(result.val)
+        return hash
+      }
+    } catch (e) {
+      console.warn('SDK putDeploy failed, trying direct RPC...', e)
+    }
+
+    // Fallback: Try RPC directly via proxy (bypasses SDK validation issues)
+    const rpcUrl = getRpcUrl()
+    const rpcResponse = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'account_put_deploy',
+        params: { deploy: deployObj },
+        id: Date.now()
+      })
+    })
+    const rpcResult = await rpcResponse.json()
+    if (rpcResult.result?.deploy_hash) {
+      return rpcResult.result.deploy_hash
+    } else if (rpcResult.error) {
+      throw new Error(rpcResult.error.message)
     }
   }
 
