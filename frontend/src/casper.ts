@@ -391,12 +391,41 @@ export async function issueCredential(
       metadata_hash: CLValueBuilder.string(metadataHash)
     })
 
-    const deploy = contractClient.callEntrypoint(
-      'issue',
-      args,
-      issuerKey,
-      CHAIN_NAME,
-      '5000000000' // 5 CSPR gas
+    let session: any;
+    const payment = DeployUtil.standardPayment(5000000000) // 5 CSPR
+
+    // Detect if we are calling a Contract Package (Versioned) or direct Contract
+    if (CONTRACT_HASH.startsWith('contract-package-')) {
+      const packageHashHex = CONTRACT_HASH.replace('contract-package-', '')
+      console.log('Constructing Versioned Call for Package:', packageHashHex)
+
+      // Use byte array for hash
+      const packageHash = Uint8Array.from(Buffer.from(packageHashHex, 'hex'))
+
+      // entryPoint, args, packageHash, version (null = latest)
+      session = DeployUtil.ExecutableDeployItem.newStoredVersionContractByHash(
+        packageHash,
+        null,
+        'issue',
+        args
+      )
+    } else {
+      const contractHashHex = CONTRACT_HASH.replace('hash-', '').replace('contract-', '')
+      console.log('Constructing Direct Call for Contract:', contractHashHex)
+
+      const contractHash = Uint8Array.from(Buffer.from(contractHashHex, 'hex'))
+
+      session = DeployUtil.ExecutableDeployItem.newStoredContractByHash(
+        contractHash,
+        'issue',
+        args
+      )
+    }
+
+    const deploy = DeployUtil.makeDeploy(
+      new DeployUtil.DeployParams(issuerKey, CHAIN_NAME),
+      session,
+      payment
     )
 
     const deployHash = await signAndSubmitDeploy(deploy, issuerPublicKey, clickRef)
