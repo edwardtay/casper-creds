@@ -511,7 +511,7 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, connectWal
     setToast({t:'ok', m:`Batch issuance requires individual on-chain transactions. Use single issue for now.`})
   }
 
-  if (!pubKey) return (<div className="text-center py-20"><div className="w-20 h-20 bg-purple-500/20 rounded-2xl flex items-center justify-center text-4xl mx-auto mb-6">🏛️</div><h2 className="text-2xl font-bold mb-4">Issuer Portal</h2><p className="text-zinc-400 mb-8">Connect your Casper Wallet to issue credentials on-chain</p><button onClick={connectWallet} className="px-6 py-3 bg-gradient-to-r from-purple-600 to-purple-700 rounded-xl font-medium">Connect Wallet</button></div>)
+  if (!pubKey) return (<div className="text-center py-20"><div className="w-20 h-20 bg-purple-500/20 rounded-2xl flex items-center justify-center text-4xl mx-auto mb-6">🏛️</div><h2 className="text-2xl font-bold mb-4">Issuer Portal</h2><p className="text-zinc-400 mb-8">Connect your wallet using the button in the header</p></div>)
 
   return (
     <div className="space-y-6">
@@ -670,7 +670,7 @@ function HolderPortal({ pubKey, credentials, setToast, connectWallet }: { pubKey
 
   const exportPDF = async (cred: Credential) => { setSelected(cred); await new Promise(r=>setTimeout(r,100)); if (!certRef.current) return; const canvas = await html2canvas(certRef.current, { backgroundColor: '#0a0a0f' }); const pdf = new jsPDF('l', 'mm', 'a4'); pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 10, 10, 277, 150); pdf.save(`credential-${cred.id}.pdf`); setToast({t:'ok', m:'PDF exported'}) }
 
-  if (!pubKey) return (<div className="text-center py-20"><div className="w-20 h-20 bg-green-500/20 rounded-2xl flex items-center justify-center text-4xl mx-auto mb-6">👤</div><h2 className="text-2xl font-bold mb-4">Holder Portal</h2><p className="text-zinc-400 mb-8">Connect your Casper Wallet to view credentials issued to you</p><button onClick={connectWallet} className="px-6 py-3 bg-gradient-to-r from-green-600 to-green-700 rounded-xl font-medium">Connect Wallet</button></div>)
+  if (!pubKey) return (<div className="text-center py-20"><div className="w-20 h-20 bg-green-500/20 rounded-2xl flex items-center justify-center text-4xl mx-auto mb-6">👤</div><h2 className="text-2xl font-bold mb-4">Holder Portal</h2><p className="text-zinc-400 mb-8">Connect your wallet using the button in the header</p></div>)
 
   return (
     <div className="space-y-6">
