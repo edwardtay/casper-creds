@@ -376,6 +376,35 @@ export async function uploadToIPFS(metadata: CredentialMetadata): Promise<string
   return `Qm${Math.abs(hash).toString(16).padStart(44, '0')}`
 }
 
+// Upload image/file to IPFS via Pinata (privacy-preserving)
+export async function uploadImageToIPFS(file: File): Promise<string> {
+  if (!PINATA_API_KEY || !PINATA_SECRET) {
+    throw new Error('IPFS not configured')
+  }
+  
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('pinataMetadata', JSON.stringify({
+    name: `credential-image-${Date.now()}`
+  }))
+  
+  const response = await fetch('https://api.pinata.cloud/pinning/pinFileToIPFS', {
+    method: 'POST',
+    headers: {
+      'pinata_api_key': PINATA_API_KEY,
+      'pinata_secret_api_key': PINATA_SECRET
+    },
+    body: formData
+  })
+  
+  if (!response.ok) {
+    throw new Error('Failed to upload image to IPFS')
+  }
+  
+  const data = await response.json()
+  return data.IpfsHash
+}
+
 // Fetch metadata from IPFS
 export async function fetchFromIPFS(cid: string): Promise<CredentialMetadata | null> {
   if (!cid || cid.startsWith('Qm0')) return null // Skip mock hashes

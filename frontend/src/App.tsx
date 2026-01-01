@@ -11,6 +11,7 @@ import {
   isContractConfigured,
   waitForDeploy,
   uploadToIPFS,
+  uploadImageToIPFS,
   isIPFSConfigured
 } from './casper'
 
@@ -440,10 +441,31 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }
   const [loading, setLoading] = useState(false)
   const [csv, setCsv] = useState('')
   const [preview, setPreview] = useState<any[]>([])
+  const [imageFile, setImageFile] = useState<File|null>(null)
+  const [imagePreview, setImagePreview] = useState<string>('')
   const myIssued = credentials.filter(c => c.issuer === pubKey)
   const generateId = () => `CRED-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`
   const contractReady = isContractConfigured()
   const ipfsReady = isIPFSConfigured()
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        setToast({t:'err', m:'Image must be under 5MB'})
+        return
+      }
+      setImageFile(file)
+      const reader = new FileReader()
+      reader.onload = (e) => setImagePreview(e.target?.result as string)
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const clearImage = () => {
+    setImageFile(null)
+    setImagePreview('')
+  }
 
   const issue = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -454,11 +476,23 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }
     const localId = generateId()
     const expiresAt = form.expires ? new Date(form.expires).getTime() : 0
     
+    // Upload image to IPFS if provided
+    let imageHash = ''
+    if (imageFile && ipfsReady) {
+      try {
+        setToast({t:'ok', m:'Uploading image to IPFS...'})
+        imageHash = await uploadImageToIPFS(imageFile)
+        console.log('Image IPFS hash:', imageHash)
+      } catch (err) {
+        console.error('Image upload failed:', err)
+      }
+    }
+    
     // Upload metadata to IPFS if configured
     let metadataHash = ''
     if (ipfsReady) {
       try {
-        setToast({t:'ok', m:'Uploading to IPFS...'})
+        setToast({t:'ok', m:'Uploading metadata to IPFS...'})
         metadataHash = await uploadToIPFS({
           title: form.title,
           type: form.type,
@@ -470,7 +504,8 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }
           description: form.description,
           holderName: form.holderName,
           grade: form.grade,
-          skills: form.skills
+          skills: form.skills,
+          imageUrl: imageHash ? `ipfs://${imageHash}` : undefined
         })
         console.log('IPFS hash:', metadataHash)
       } catch (err) {
@@ -518,6 +553,8 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }
           addCredential(cred)
           setToast({t:'ok', m:`✓ On-chain: ${localId}${metadataHash ? ' + IPFS' : ''}`})
           setForm({ holder:'', type:'degree', title:'', institution:'', expires:'', holderName:'', description:'', grade:'', skills:'' })
+          setImageFile(null)
+          setImagePreview('')
           setLoading(false)
           return
         }
@@ -561,6 +598,24 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }
               <div><label className="block text-sm text-zinc-400 mb-2">Grade/Score</label><input value={form.grade} onChange={e=>setForm({...form,grade:e.target.value})} placeholder="e.g. 3.8 GPA, A+, Pass" className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700"/></div>
               <div><label className="block text-sm text-zinc-400 mb-2">Skills</label><input value={form.skills} onChange={e=>setForm({...form,skills:e.target.value})} placeholder="e.g. Python, AWS, Leadership" className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700"/></div>
               <div className="col-span-2"><label className="block text-sm text-zinc-400 mb-2">Description</label><textarea value={form.description} onChange={e=>setForm({...form,description:e.target.value})} placeholder="Additional details about the credential..." rows={2} className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700"/></div>
+              <div className="col-span-2">
+                <label className="block text-sm text-zinc-400 mb-2">Image/Document (Privacy-Preserving IPFS)</label>
+                {imagePreview ? (
+                  <div className="relative inline-block">
+                    <img src={imagePreview} alt="Preview" className="h-24 rounded-lg border border-zinc-700"/>
+                    <button type="button" onClick={clearImage} className="absolute -top-2 -right-2 w-6 h-6 bg-red-600 rounded-full text-white text-xs">×</button>
+                  </div>
+                ) : (
+                  <label className="flex items-center justify-center w-full h-24 border-2 border-dashed border-zinc-700 rounded-xl cursor-pointer hover:border-zinc-500 transition">
+                    <div className="text-center">
+                      <span className="text-2xl">📎</span>
+                      <p className="text-xs text-zinc-500 mt-1">Click to upload (max 5MB)</p>
+                      <p className="text-xs text-zinc-600">Stored on IPFS • Only hash on-chain</p>
+                    </div>
+                    <input type="file" accept="image/*,.pdf" onChange={handleImageChange} className="hidden"/>
+                  </label>
+                )}
+              </div>
               <div className="col-span-2"><button disabled={loading} className="w-full py-4 bg-gradient-to-r from-purple-600 to-purple-700 rounded-xl font-medium disabled:opacity-50 text-lg">{loading ? 'Issuing...' : '📝 Issue Credential'}</button></div>
             </div>
           </form>
