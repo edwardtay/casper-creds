@@ -118,6 +118,8 @@ export async function getCredentialFromChain(credentialId: number): Promise<OnCh
 async function signAndSubmitDeploy(deploy: any, publicKey: string, clickRef?: any): Promise<string> {
   const deployJson = DeployUtil.deployToJson(deploy)
   
+  console.log('signAndSubmitDeploy called, clickRef:', !!clickRef, 'type:', typeof clickRef)
+  
   // CSPR.click is the preferred method - it handles signing properly
   if (clickRef) {
     const methods = Object.keys(clickRef).filter(k => typeof clickRef[k] === 'function')
