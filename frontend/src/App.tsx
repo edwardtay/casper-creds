@@ -451,7 +451,7 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }
   const contractReady = isContractConfigured()
   const ipfsReady = isIPFSConfigured()
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
       if (file.size > 5 * 1024 * 1024) {
@@ -460,7 +460,27 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }
       }
       setImageFile(file)
       const reader = new FileReader()
-      reader.onload = (e) => setImagePreview(e.target?.result as string)
+      reader.onload = async (e) => {
+        const base64 = e.target?.result as string
+        setImagePreview(base64)
+        
+        // Try OCR extraction
+        if (file.type.startsWith('image/')) {
+          setToast({t:'ok', m:'🔍 Extracting info with AI...'})
+          try {
+            const extracted = await extractCredentialInfo(base64)
+            if (extracted) {
+              setForm(prev => ({
+                ...prev,
+                ...extracted
+              }))
+              setToast({t:'ok', m:'✓ Auto-filled from image'})
+            }
+          } catch (err) {
+            console.error('OCR failed:', err)
+          }
+        }
+      }
       reader.readAsDataURL(file)
     }
   }
@@ -468,6 +488,93 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }
   const clearImage = () => {
     setImageFile(null)
     setImagePreview('')
+  }
+
+  // Extract credential info from image using AI
+  const extractCredentialInfo = async (base64Image: string): Promise<Partial<typeof form> | null> => {
+    const hfToken = import.meta.env.VITE_HUGGINGFACE_API_KEY
+    if (!hfToken) return null
+    
+    try {
+      // Use HuggingFace's free OCR model
+      const imageData = base64Image.split(',')[1]
+      
+      // First, try to get text from image using a vision model
+      const ocrResponse = await fetch('https://api-inference.huggingface.co/models/microsoft/trocr-base-printed', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${hfToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ inputs: imageData })
+      })
+      
+      let extractedText = ''
+      if (ocrResponse.ok) {
+        const ocrData = await ocrResponse.json()
+        extractedText = ocrData[0]?.generated_text || ''
+      }
+      
+      // Parse common credential patterns from the image filename and any extracted text
+      const result: Partial<typeof form> = {}
+      const text = (extractedText + ' ' + base64Image).toLowerCase()
+      
+      // Detect credential type
+      if (text.includes('degree') || text.includes('bachelor') || text.includes('master') || text.includes('phd') || text.includes('diploma')) {
+        result.type = 'degree'
+      } else if (text.includes('certificate') || text.includes('certification') || text.includes('certified')) {
+        result.type = 'certificate'
+      } else if (text.includes('license') || text.includes('licensed') || text.includes('licensure')) {
+        result.type = 'license'
+      } else if (text.includes('employment') || text.includes('employee') || text.includes('work')) {
+        result.type = 'employment'
+      }
+      
+      // Try to extract name (look for common patterns)
+      const nameMatch = extractedText.match(/(?:certify that|awarded to|granted to|this is to certify)\s+([A-Z][a-z]+\s+[A-Z][a-z]+)/i)
+      if (nameMatch) result.holderName = nameMatch[1]
+      
+      // Extract institution
+      const instPatterns = [
+        /(?:university|college|institute|school|board|academy)\s+of\s+[\w\s]+/i,
+        /[\w\s]+(?:university|college|institute|board)/i,
+        /state board of [\w\s]+/i
+      ]
+      for (const pattern of instPatterns) {
+        const match = extractedText.match(pattern)
+        if (match) {
+          result.institution = match[0].trim()
+          break
+        }
+      }
+      
+      // Extract title
+      const titlePatterns = [
+        /(?:professional|licensed)\s+[\w\s]+(?:engineer|nurse|doctor|accountant)/i,
+        /(?:bachelor|master|doctor)\s+of\s+[\w\s]+/i,
+        /[\w\s]+certification/i
+      ]
+      for (const pattern of titlePatterns) {
+        const match = extractedText.match(pattern)
+        if (match) {
+          result.title = match[0].trim()
+          break
+        }
+      }
+      
+      // Extract skills from areas of specialization
+      const skillsMatch = extractedText.match(/(?:specialization|skills|areas)[\s:]+([^.]+)/i)
+      if (skillsMatch) result.skills = skillsMatch[1].trim()
+      
+      // Extract grade/status
+      const gradeMatch = extractedText.match(/(?:grade|status|gpa|score)[\s:]+([A-Za-z0-9.+]+)/i)
+      if (gradeMatch) result.grade = gradeMatch[1]
+      
+      return Object.keys(result).length > 0 ? result : null
+    } catch (err) {
+      console.error('AI extraction error:', err)
+      return null
+    }
   }
 
   const issue = async (e: React.FormEvent) => {
@@ -602,18 +709,18 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }
               <div><label className="block text-sm text-zinc-400 mb-2">Skills</label><input value={form.skills} onChange={e=>setForm({...form,skills:e.target.value})} placeholder="e.g. Python, AWS, Leadership" className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700"/></div>
               <div className="col-span-2"><label className="block text-sm text-zinc-400 mb-2">Description</label><textarea value={form.description} onChange={e=>setForm({...form,description:e.target.value})} placeholder="Additional details about the credential..." rows={2} className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700"/></div>
               <div className="col-span-2">
-                <label className="block text-sm text-zinc-400 mb-2">Image/Document (Privacy-Preserving IPFS)</label>
+                <label className="block text-sm text-zinc-400 mb-2">Image/Document (AI Auto-Extract + IPFS)</label>
                 {imagePreview ? (
                   <div className="relative inline-block">
                     <img src={imagePreview} alt="Preview" className="h-24 rounded-lg border border-zinc-700"/>
                     <button type="button" onClick={clearImage} className="absolute -top-2 -right-2 w-6 h-6 bg-red-600 rounded-full text-white text-xs">×</button>
                   </div>
                 ) : (
-                  <label className="flex items-center justify-center w-full h-24 border-2 border-dashed border-zinc-700 rounded-xl cursor-pointer hover:border-zinc-500 transition">
+                  <label className="flex items-center justify-center w-full h-24 border-2 border-dashed border-zinc-700 rounded-xl cursor-pointer hover:border-purple-500 transition">
                     <div className="text-center">
-                      <span className="text-2xl">📎</span>
-                      <p className="text-xs text-zinc-500 mt-1">Click to upload (max 5MB)</p>
-                      <p className="text-xs text-zinc-600">Stored on IPFS • Only hash on-chain</p>
+                      <span className="text-2xl">🤖</span>
+                      <p className="text-xs text-zinc-400 mt-1">Upload credential → AI auto-fills form</p>
+                      <p className="text-xs text-zinc-600">OCR extracts name, title, institution</p>
                     </div>
                     <input type="file" accept="image/*,.pdf" onChange={handleImageChange} className="hidden"/>
                   </label>
