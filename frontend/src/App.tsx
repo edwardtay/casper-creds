@@ -441,7 +441,7 @@ function LandingPage({ setRole, chainStats, credentials }: { setRole:(r:Role)=>v
 
 function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }: { pubKey:string, credentials:Credential[], addCredential:(c:Credential)=>void, setToast:(t:any)=>void, clickRef:any }) {
   const [view, setView] = useState<'issue'|'batch'|'history'>('issue')
-  const [form, setForm] = useState({ holder:'', type:'degree', title:'', institution:'', expires:'', holderName:'', description:'', grade:'', skills:'' })
+  const [form, setForm] = useState({ holder:'', type:'degree', title:'', institution:'', startDate:'', expires:'', holderName:'', description:'', grade:'', skills:'' })
   const [loading, setLoading] = useState(false)
   const [csv, setCsv] = useState('')
   const [preview, setPreview] = useState<any[]>([])
@@ -613,6 +613,77 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }
       else if (text.includes('passed') || text.includes('pass')) result.grade = 'Pass'
       else if (text.includes('completed')) result.grade = 'Completed'
       
+      // Extract dates (start date, expiration date, issue date)
+      // Common date formats: MM/DD/YYYY, DD/MM/YYYY, Month DD, YYYY, YYYY-MM-DD
+      const foundDates: { date: Date, context: string }[] = []
+      const monthMap: {[key:string]:number} = { january:0, february:1, march:2, april:3, may:4, june:5, july:6, august:7, september:8, october:9, november:10, december:11 }
+      
+      for (const line of lines) {
+        // Check numeric date patterns
+        let match = line.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/)
+        if (match) {
+          const [_, p1, p2, year] = match
+          // Assume MM/DD/YYYY format
+          const date = new Date(parseInt(year), parseInt(p1) - 1, parseInt(p2))
+          if (!isNaN(date.getTime())) {
+            foundDates.push({ date, context: line.toLowerCase() })
+          }
+        }
+        
+        // Check YYYY-MM-DD
+        match = line.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/)
+        if (match) {
+          const [_, year, month, day] = match
+          const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
+          if (!isNaN(date.getTime())) {
+            foundDates.push({ date, context: line.toLowerCase() })
+          }
+        }
+        
+        // Check Month DD, YYYY
+        match = line.match(/(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2}),?\s+(\d{4})/i)
+        if (match) {
+          const [_, month, day, year] = match
+          const date = new Date(parseInt(year), monthMap[month.toLowerCase()], parseInt(day))
+          if (!isNaN(date.getTime())) {
+            foundDates.push({ date, context: line.toLowerCase() })
+          }
+        }
+        
+        // Check DD Month YYYY
+        match = line.match(/(\d{1,2})\s+(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{4})/i)
+        if (match) {
+          const [_, day, month, year] = match
+          const date = new Date(parseInt(year), monthMap[month.toLowerCase()], parseInt(day))
+          if (!isNaN(date.getTime())) {
+            foundDates.push({ date, context: line.toLowerCase() })
+          }
+        }
+      }
+      
+      // Categorize dates based on context
+      const formatDate = (d: Date) => d.toISOString().split('T')[0] // YYYY-MM-DD for input[type=date]
+      
+      for (const { date, context } of foundDates) {
+        if (/expir|valid until|through|ends/i.test(context)) {
+          result.expires = formatDate(date)
+        } else if (/issued|granted|awarded|start|effective|from|begin/i.test(context)) {
+          result.startDate = formatDate(date)
+        }
+      }
+      
+      // If we found dates but couldn't categorize, use heuristics
+      if (foundDates.length > 0 && !result.startDate && !result.expires) {
+        const sortedDates = foundDates.sort((a, b) => a.date.getTime() - b.date.getTime())
+        if (sortedDates.length >= 2) {
+          result.startDate = formatDate(sortedDates[0].date)
+          result.expires = formatDate(sortedDates[sortedDates.length - 1].date)
+        } else if (sortedDates.length === 1) {
+          // Single date - likely issue/start date
+          result.startDate = formatDate(sortedDates[0].date)
+        }
+      }
+      
       console.log('Extracted fields:', result)
       return Object.keys(result).length > 0 ? result : null
     } catch (err: any) {
@@ -657,6 +728,7 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }
           holder: form.holder,
           issuer: pubKey,
           issuedAt: timestamp,
+          startDate: form.startDate ? new Date(form.startDate).getTime() : timestamp,
           expiresAt,
           description: form.description,
           holderName: form.holderName,
@@ -709,7 +781,7 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }
           }
           addCredential(cred)
           setToast({t:'ok', m:`✓ On-chain: ${localId}${metadataHash ? ' + IPFS' : ''}`})
-          setForm({ holder:'', type:'degree', title:'', institution:'', expires:'', holderName:'', description:'', grade:'', skills:'' })
+          setForm({ holder:'', type:'degree', title:'', institution:'', startDate:'', expires:'', holderName:'', description:'', grade:'', skills:'' })
           setImageFile(null)
           setImagePreview('')
           setLoading(false)
@@ -749,6 +821,7 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }
               <div className="col-span-2"><label className="block text-sm text-zinc-400 mb-2">Holder Address *</label><input value={form.holder} onChange={e=>setForm({...form,holder:e.target.value})} placeholder="02abc... (Casper public key)" className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700 font-mono text-sm" required/></div>
               <div className="col-span-2"><label className="block text-sm text-zinc-400 mb-2">Holder Name</label><input value={form.holderName} onChange={e=>setForm({...form,holderName:e.target.value})} placeholder="e.g. John Smith" className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700"/></div>
               <div><label className="block text-sm text-zinc-400 mb-2">Type</label><select value={form.type} onChange={e=>setForm({...form,type:e.target.value})} className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700"><option value="degree">🎓 Degree</option><option value="certificate">📜 Certificate</option><option value="license">📋 License</option><option value="employment">💼 Employment</option><option value="identity">🪪 Identity</option></select></div>
+              <div><label className="block text-sm text-zinc-400 mb-2">Start Date</label><input type="date" value={form.startDate} onChange={e=>setForm({...form,startDate:e.target.value})} className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700"/></div>
               <div><label className="block text-sm text-zinc-400 mb-2">Expiration</label><input type="date" value={form.expires} onChange={e=>setForm({...form,expires:e.target.value})} className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700"/></div>
               <div className="col-span-2"><label className="block text-sm text-zinc-400 mb-2">Institution *</label><input value={form.institution} onChange={e=>setForm({...form,institution:e.target.value})} placeholder="e.g. MIT, AWS, State Board" className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700" required/></div>
               <div className="col-span-2"><label className="block text-sm text-zinc-400 mb-2">Title *</label><input value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder="e.g. Bachelor of Science in Computer Science" className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700" required/></div>

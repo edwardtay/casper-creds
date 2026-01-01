@@ -329,6 +329,7 @@ export interface CredentialMetadata {
   holder: string
   issuer: string
   issuedAt: number
+  startDate?: number
   expiresAt: number
   description?: string
   imageUrl?: string
