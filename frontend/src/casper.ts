@@ -332,6 +332,9 @@ export interface CredentialMetadata {
   expiresAt: number
   description?: string
   imageUrl?: string
+  holderName?: string
+  grade?: string
+  skills?: string
 }
 
 // Upload metadata to IPFS via Pinata (if configured) or return mock hash

@@ -239,7 +239,11 @@ export default function App() {
             ) : (
               <button onClick={connectWallet} className="px-4 py-2 bg-gradient-to-r from-red-600 to-red-700 rounded-lg font-medium shadow-lg shadow-red-500/20">Connect Wallet</button>
             )}
-            <button onClick={()=>handleSetRole(null)} className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm">Switch Role</button>
+            <select value={role || ''} onChange={e=>handleSetRole(e.target.value as Role)} className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm border border-zinc-700 cursor-pointer">
+              <option value="issuer">🏛️ Issuer</option>
+              <option value="verifier">🔍 Verifier</option>
+              <option value="holder">👤 Holder</option>
+            </select>
           </div>
         </div>
       </header>
@@ -400,7 +404,7 @@ function LandingPage({ setRole, chainStats, credentials }: { setRole:(r:Role)=>v
 
 function IssuerPortal({ pubKey, credentials, addCredential, setToast, connectWallet, clickRef }: { pubKey:string, credentials:Credential[], addCredential:(c:Credential)=>void, setToast:(t:any)=>void, connectWallet:()=>void, clickRef:any }) {
   const [view, setView] = useState<'issue'|'batch'|'history'>('issue')
-  const [form, setForm] = useState({ holder:'', type:'degree', title:'', institution:'', expires:'' })
+  const [form, setForm] = useState({ holder:'', type:'degree', title:'', institution:'', expires:'', holderName:'', description:'', grade:'', skills:'' })
   const [loading, setLoading] = useState(false)
   const [csv, setCsv] = useState('')
   const [preview, setPreview] = useState<any[]>([])
@@ -430,7 +434,11 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, connectWal
           holder: form.holder,
           issuer: pubKey,
           issuedAt: timestamp,
-          expiresAt
+          expiresAt,
+          description: form.description,
+          holderName: form.holderName,
+          grade: form.grade,
+          skills: form.skills
         })
         console.log('IPFS hash:', metadataHash)
       } catch (err) {
@@ -477,7 +485,7 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, connectWal
           }
           addCredential(cred)
           setToast({t:'ok', m:`✓ On-chain: ${localId}${metadataHash ? ' + IPFS' : ''}`})
-          setForm({ holder:'', type:'degree', title:'', institution:'', expires:'' })
+          setForm({ holder:'', type:'degree', title:'', institution:'', expires:'', holderName:'', description:'', grade:'', skills:'' })
           setLoading(false)
           return
         }
@@ -513,10 +521,14 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, connectWal
           <form onSubmit={issue} className="lg:col-span-2 p-6 bg-zinc-900/50 rounded-2xl border border-zinc-800"><h3 className="text-lg font-semibold mb-6">Issue New Credential</h3>
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2"><label className="block text-sm text-zinc-400 mb-2">Holder Address *</label><input value={form.holder} onChange={e=>setForm({...form,holder:e.target.value})} placeholder="02abc... (Casper public key)" className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700 font-mono text-sm" required/></div>
+              <div className="col-span-2"><label className="block text-sm text-zinc-400 mb-2">Holder Name</label><input value={form.holderName} onChange={e=>setForm({...form,holderName:e.target.value})} placeholder="e.g. John Smith" className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700"/></div>
               <div><label className="block text-sm text-zinc-400 mb-2">Type</label><select value={form.type} onChange={e=>setForm({...form,type:e.target.value})} className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700"><option value="degree">🎓 Degree</option><option value="certificate">📜 Certificate</option><option value="license">📋 License</option><option value="employment">💼 Employment</option><option value="identity">🪪 Identity</option></select></div>
               <div><label className="block text-sm text-zinc-400 mb-2">Expiration</label><input type="date" value={form.expires} onChange={e=>setForm({...form,expires:e.target.value})} className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700"/></div>
               <div className="col-span-2"><label className="block text-sm text-zinc-400 mb-2">Institution *</label><input value={form.institution} onChange={e=>setForm({...form,institution:e.target.value})} placeholder="e.g. MIT, AWS, State Board" className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700" required/></div>
               <div className="col-span-2"><label className="block text-sm text-zinc-400 mb-2">Title *</label><input value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder="e.g. Bachelor of Science in Computer Science" className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700" required/></div>
+              <div><label className="block text-sm text-zinc-400 mb-2">Grade/Score</label><input value={form.grade} onChange={e=>setForm({...form,grade:e.target.value})} placeholder="e.g. 3.8 GPA, A+, Pass" className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700"/></div>
+              <div><label className="block text-sm text-zinc-400 mb-2">Skills</label><input value={form.skills} onChange={e=>setForm({...form,skills:e.target.value})} placeholder="e.g. Python, AWS, Leadership" className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700"/></div>
+              <div className="col-span-2"><label className="block text-sm text-zinc-400 mb-2">Description</label><textarea value={form.description} onChange={e=>setForm({...form,description:e.target.value})} placeholder="Additional details about the credential..." rows={2} className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700"/></div>
               <div className="col-span-2"><button disabled={loading} className="w-full py-4 bg-gradient-to-r from-purple-600 to-purple-700 rounded-xl font-medium disabled:opacity-50 text-lg">{loading ? 'Issuing...' : '📝 Issue Credential'}</button></div>
             </div>
           </form>
