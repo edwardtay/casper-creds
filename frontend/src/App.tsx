@@ -4,6 +4,7 @@ import { QRCodeSVG } from 'qrcode.react'
 import html2canvas from 'html2canvas'
 import jsPDF from 'jspdf'
 import { useClickRef } from '@make-software/csprclick-ui'
+import { createWorker } from 'tesseract.js'
 import { 
   getChainStats, 
   verifyCredentialOnChain, 
@@ -515,34 +516,24 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }
     setImagePreview('')
   }
 
-  // Extract credential info from image using AI (with abort support)
+  // Extract credential info from image using Tesseract.js (fast, client-side OCR)
   const extractCredentialInfo = async (base64Image: string, signal: AbortSignal): Promise<Partial<typeof form> | null> => {
-    const hfToken = import.meta.env.VITE_HUGGINGFACE_API_KEY
-    if (!hfToken) return null
-    
     try {
-      const imageData = base64Image.split(',')[1]
+      // Create Tesseract worker
+      const worker = await createWorker('eng')
       
-      // Use a faster, lighter model for text extraction
-      const ocrResponse = await fetch('https://api-inference.huggingface.co/models/microsoft/trocr-base-printed', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${hfToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ inputs: imageData }),
-        signal
-      })
-      
-      if (signal.aborted) return null
-      
-      let extractedText = ''
-      if (ocrResponse.ok) {
-        const ocrData = await ocrResponse.json()
-        extractedText = ocrData[0]?.generated_text || ''
+      if (signal.aborted) {
+        await worker.terminate()
+        return null
       }
       
+      // Run OCR (~1-3 seconds, runs locally in browser)
+      const { data: { text: extractedText } } = await worker.recognize(base64Image)
+      await worker.terminate()
+      
       if (signal.aborted) return null
+      
+      console.log('OCR extracted:', extractedText)
       
       // Parse common credential patterns
       const result: Partial<typeof form> = {}
@@ -559,28 +550,50 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }
         result.type = 'employment'
       }
       
-      // Extract name
-      const nameMatch = extractedText.match(/(?:certify that|awarded to|granted to|this is to certify)\s+([A-Z][a-z]+\s+[A-Z][a-z]+)/i)
-      if (nameMatch) result.holderName = nameMatch[1]
+      // Extract name (common patterns)
+      const namePatterns = [
+        /(?:certify that|awarded to|granted to|this is to certify|presented to)\s+([A-Z][a-z]+\s+[A-Z][a-z]+)/i,
+        /([A-Z][a-z]+\s+[A-Z][a-z]+)\s+(?:has completed|is hereby|has been)/i
+      ]
+      for (const pattern of namePatterns) {
+        const match = extractedText.match(pattern)
+        if (match) { result.holderName = match[1].trim(); break }
+      }
       
       // Extract institution
-      const instPatterns = [/state board of [\w\s]+/i, /[\w\s]+(?:university|college|institute|board)/i]
+      const instPatterns = [
+        /state board of [\w\s]+/i,
+        /(?:university|college|institute|academy|school)\s+of\s+[\w\s]+/i,
+        /[\w\s]+(?:university|college|institute|board|academy)/i
+      ]
       for (const pattern of instPatterns) {
         const match = extractedText.match(pattern)
         if (match) { result.institution = match[0].trim(); break }
       }
       
       // Extract title
-      const titlePatterns = [/professional\s+[\w]+/i, /(?:bachelor|master)\s+of\s+[\w\s]+/i]
+      const titlePatterns = [
+        /professional\s+[\w\s]+(?:engineer|nurse|accountant)/i,
+        /(?:bachelor|master|doctor)\s+of\s+[\w\s]+/i,
+        /(?:certified|licensed)\s+[\w\s]+/i
+      ]
       for (const pattern of titlePatterns) {
         const match = extractedText.match(pattern)
         if (match) { result.title = match[0].trim(); break }
       }
       
+      // Extract skills/specialization
+      const skillsMatch = extractedText.match(/(?:specialization|areas|skills)[\s:]+([^\n.]+)/i)
+      if (skillsMatch) result.skills = skillsMatch[1].trim()
+      
+      // Extract grade/status
+      if (text.includes('licensed')) result.grade = 'Licensed'
+      else if (text.includes('pass')) result.grade = 'Pass'
+      
       return Object.keys(result).length > 0 ? result : null
     } catch (err: any) {
       if (err.name === 'AbortError') throw err
-      console.error('AI extraction error:', err)
+      console.error('OCR error:', err)
       return null
     }
   }
