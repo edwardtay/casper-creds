@@ -162,14 +162,21 @@ export async function issueCredential(
 
     const deployJson = DeployUtil.deployToJson(deploy)
     
-    // Try CSPR.click first if available
-    if (clickRef?.send) {
-      const result = await clickRef.send(deployJson, issuerPublicKey)
-      if (result?.cancelled) throw new Error('User cancelled signing')
-      if (result?.error) throw new Error(result.error)
-      if (result?.deployHash) return { deployHash: result.deployHash }
-      if (result?.transactionHash) return { deployHash: result.transactionHash }
-      throw new Error('No transaction hash returned')
+    // Try CSPR.click SDK methods
+    if (clickRef) {
+      // Try different method names that CSPR.click might use
+      const sendMethod = clickRef.send || clickRef.sendDeploy || clickRef.signAndSendDeploy
+      if (sendMethod) {
+        try {
+          const result = await sendMethod.call(clickRef, deployJson, issuerPublicKey)
+          if (result?.cancelled) throw new Error('User cancelled signing')
+          if (result?.error) throw new Error(result.error)
+          if (result?.deployHash) return { deployHash: result.deployHash }
+          if (result?.transactionHash) return { deployHash: result.transactionHash }
+        } catch (e: any) {
+          console.log('CSPR.click send failed, trying wallet:', e.message)
+        }
+      }
     }
     
     // Fallback to direct Casper Wallet
@@ -222,14 +229,20 @@ export async function revokeCredential(
 
     const deployJson = DeployUtil.deployToJson(deploy)
     
-    // Try CSPR.click first if available
-    if (clickRef?.send) {
-      const result = await clickRef.send(deployJson, issuerPublicKey)
-      if (result?.cancelled) throw new Error('User cancelled signing')
-      if (result?.error) throw new Error(result.error)
-      if (result?.deployHash) return { deployHash: result.deployHash }
-      if (result?.transactionHash) return { deployHash: result.transactionHash }
-      throw new Error('No transaction hash returned')
+    // Try CSPR.click SDK methods
+    if (clickRef) {
+      const sendMethod = clickRef.send || clickRef.sendDeploy || clickRef.signAndSendDeploy
+      if (sendMethod) {
+        try {
+          const result = await sendMethod.call(clickRef, deployJson, issuerPublicKey)
+          if (result?.cancelled) throw new Error('User cancelled signing')
+          if (result?.error) throw new Error(result.error)
+          if (result?.deployHash) return { deployHash: result.deployHash }
+          if (result?.transactionHash) return { deployHash: result.transactionHash }
+        } catch (e: any) {
+          console.log('CSPR.click send failed, trying wallet:', e.message)
+        }
+      }
     }
     
     // Fallback to direct Casper Wallet
