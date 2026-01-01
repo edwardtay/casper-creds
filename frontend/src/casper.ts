@@ -165,32 +165,25 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string): Promise<stri
     console.log('Signature hex (first 20 chars):', sigHex.substring(0, 20))
     console.log('Signature hex length:', sigHex.length)
     
-    // Reconstruct deploy and manually add approval
-    const deployResult = DeployUtil.deployFromJson(deployJson)
-    if (deployResult.err) throw new Error('Failed to reconstruct deploy')
-    signedDeploy = deployResult.val
-    
-    // Try using setSignature if available, otherwise manually add approval
-    const signerKey = CLPublicKey.fromHex(publicKey)
-    try {
-      // Ed25519 signatures need 01 prefix, secp256k1 need 02
-      // Check if signature already has prefix by length (65 bytes = prefixed, 64 = raw)
-      let fullSigHex = sigHex
-      if (sigHex.length === 128) {
-        // Raw 64-byte signature, add ed25519 prefix
-        fullSigHex = '01' + sigHex
-      }
-      const sigBytes = Uint8Array.from(fullSigHex.match(/.{2}/g)!.map(byte => parseInt(byte, 16)))
-      signedDeploy = DeployUtil.setSignature(signedDeploy, sigBytes, signerKey)
-      console.log('Used DeployUtil.setSignature with prefix, length:', fullSigHex.length)
-    } catch (e) {
-      console.log('setSignature failed, trying manual approval:', e)
-      // Manual approval format
-      signedDeploy.approvals.push({
-        signer: publicKey,
-        signature: '01' + sigHex // 01 prefix for ed25519
-      })
+    // Ed25519 signatures need 01 prefix
+    let fullSigHex = sigHex
+    if (sigHex.length === 128) {
+      fullSigHex = '01' + sigHex
     }
+    
+    // Reconstruct deploy and add approval directly to JSON
+    // This avoids SDK serialization issues
+    const signedDeployJson = JSON.parse(JSON.stringify(deployJson))
+    signedDeployJson.deploy.approvals = [{
+      signer: publicKey,
+      signature: fullSigHex
+    }]
+    
+    console.log('Added approval to deploy JSON')
+    
+    const deployResult = DeployUtil.deployFromJson(signedDeployJson)
+    if (deployResult.err) throw new Error('Failed to reconstruct signed deploy: ' + deployResult.err)
+    signedDeploy = deployResult.val
   } else {
     throw new Error('Wallet returned no signature or deploy. Keys: ' + Object.keys(signResult).join(', '))
   }
