@@ -396,13 +396,22 @@ export async function issueCredential(
     const isPackage = CONTRACT_HASH.includes('contract-package-') || CONTRACT_HASH.startsWith('fc4506');
     console.log(`DEBUG: Detected as package? ${isPackage}`)
 
+    // Helper for browser-safe hex conversion
+    const hexToBytes = (hex: string) => {
+      const bytes = new Uint8Array(hex.length / 2);
+      for (let i = 0; i < hex.length; i += 2) {
+        bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
+      }
+      return bytes;
+    }
+
     if (isPackage) {
       // Remove prefix if present, otherwise assume it's already raw hex
       const packageHashHex = CONTRACT_HASH.replace('contract-package-', '')
       console.log('Constructing Versioned Call for Package:', packageHashHex)
 
-      // Use byte array for hash
-      const packageHash = Uint8Array.from(Buffer.from(packageHashHex, 'hex'))
+      // Use browser-safe conversion
+      const packageHash = hexToBytes(packageHashHex)
 
       // entryPoint, args, packageHash, version (null = latest)
       session = DeployUtil.ExecutableDeployItem.newStoredVersionContractByHash(
@@ -415,7 +424,7 @@ export async function issueCredential(
       const contractHashHex = CONTRACT_HASH.replace('hash-', '').replace('contract-', '')
       console.log('Constructing Direct Call for Contract:', contractHashHex)
 
-      const contractHash = Uint8Array.from(Buffer.from(contractHashHex, 'hex'))
+      const contractHash = hexToBytes(contractHashHex)
 
       session = DeployUtil.ExecutableDeployItem.newStoredContractByHash(
         contractHash,
