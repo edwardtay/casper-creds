@@ -1,68 +1,84 @@
-# CasperCreds 🎓
+# CasperCreds
 
-**Verifiable Credentials on Casper Blockchain** — Issue, verify, and manage tamper-proof credentials.
+Verifiable credentials on Casper blockchain. Issue, verify, revoke.
 
-[![Casper Network](https://img.shields.io/badge/Casper-Testnet-red)](https://testnet.cspr.live)
-[![Contract](https://img.shields.io/badge/Contract-Live-green)](https://testnet.cspr.live/contract-package/fc4506f2d996605cbb8d4e06158b8d4320433e2dde4dc766f65115911ac98973)
+[![Live](https://img.shields.io/badge/Demo-casper--creds.vercel.app-blue)](https://casper-creds.vercel.app)
+[![Contract](https://img.shields.io/badge/Contract-Testnet-green)](https://testnet.cspr.live/contract-package/fc4506f2d996605cbb8d4e06158b8d4320433e2dde4dc766f65115911ac98973)
 
-**Live Demo:** [casper-creds.vercel.app](https://casper-creds.vercel.app)
+## Architecture
 
----
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   Frontend  │────▶│  Casper RPC │────▶│  Contract   │
+│  React/Vite │     │   (Proxy)   │     │   (Odra)    │
+└─────────────┘     └─────────────┘     └─────────────┘
+       │                                       │
+       ▼                                       ▼
+┌─────────────┐                         ┌─────────────┐
+│    IPFS     │                         │  On-chain   │
+│  (Pinata)   │                         │   Storage   │
+└─────────────┘                         └─────────────┘
+```
 
-## ✅ What's Live
+**On-chain:** issuer, holder, type, title, expiry, metadataHash, revoked  
+**Off-chain (IPFS):** full metadata JSON, images
 
-| Feature | Status |
-|---------|--------|
-| Smart Contract on Casper Testnet | ✅ |
-| Issue credentials (wallet signing) | ✅ |
-| Verify credentials on-chain | ✅ |
-| IPFS metadata storage (Pinata) | ✅ |
-| OCR auto-fill from document images | ✅ |
-| 5 credential types | ✅ |
-| PDF export & QR codes | ✅ |
-| CSPR.click wallet integration | ✅ |
+## Contract
 
----
+```
+hash: fc4506f2d996605cbb8d4e06158b8d4320433e2dde4dc766f65115911ac98973
+network: casper-test
+```
 
-## 🔗 Contract
+Entry points:
+- `issue(holder, credential_type, title, expires_at, metadata_hash)` — 5 CSPR gas
+- `revoke(id, reason)` — 3 CSPR gas
+- `verify(id)` — read-only
 
-**Address:** [`fc4506f2d996605cbb8d4e06158b8d4320433e2dde4dc766f65115911ac98973`](https://testnet.cspr.live/contract-package/fc4506f2d996605cbb8d4e06158b8d4320433e2dde4dc766f65115911ac98973)
+## Stack
 
-### Sample Credentials On-Chain
+| Layer | Tech |
+|-------|------|
+| Contract | Rust + Odra framework |
+| Frontend | React 18 + Vite + TailwindCSS |
+| Wallet | CSPR.click SDK + Casper Wallet extension |
+| Storage | IPFS via Pinata |
+| OCR | Tesseract.js (client-side) |
+| Deploy | Vercel |
 
-| Type | Title | TX |
-|------|-------|-----|
-| 🎓 Degree | Bachelor of Science in Computer Science | [View](https://testnet.cspr.live/deploy/60145ce6a20b058fd7f69060192929fa32ad9519a6b2f64821216ebd1b932127) |
-| 📜 Certificate | Cloud Practitioner Certification | [View](https://testnet.cspr.live/deploy/301f4dd7d405fdd91c241e656973cf59cd7508e1b149896f3b4eddd35fd502da) |
-| 📋 License | Professional Software Engineer License | [View](https://testnet.cspr.live/deploy/5ea7b2d8ad7c083ee6f416878487ce0a7f8e64c14d04603c940c79e9ac6a9ace) |
-| 💼 Employment | Senior Developer Verification | [View](https://testnet.cspr.live/deploy/d4bff277c19f73c44edd6f24f69e7561c82c9006f1539b130297791960d2474d) |
-| 🪪 Identity | Verified Identity Document | [View](https://testnet.cspr.live/deploy/b799f8997e19af0ea3e73a11a99382a26f8c6b8aadd2f9339e859352d4f4ad04) |
-
----
-
-## 🚀 Run Locally
+## Run
 
 ```bash
-cd frontend
-npm install
-npm run dev
+cd frontend && npm i && npm run dev
 ```
 
----
+## Env
 
-## 📁 Structure
-
-```
-├── frontend/          # React + Vite app
-│   ├── src/App.tsx    # Main app (Issuer/Verifier/Holder portals)
-│   └── src/casper.ts  # Casper SDK + IPFS
-├── contracts/         # Odra smart contract (Rust)
-│   └── src/creds.rs   # Credential contract
-└── api/rpc.js         # Vercel serverless proxy
+```bash
+# frontend/.env
+VITE_CONTRACT_HASH=contract-package-fc4506f2...
+VITE_CASPER_NETWORK=casper-test
+VITE_PINATA_API_KEY=xxx        # optional
+VITE_PINATA_SECRET_KEY=xxx     # optional
 ```
 
----
+## Contract Dev
 
-## 📄 License
+```bash
+cd contracts
+cargo odra build
+cargo odra test
+```
+
+Deploy via `cargo odra deploy` or manual wasm upload.
+
+## Notes
+
+- Issuing requires Casper Wallet extension (not social login) + testnet CSPR for gas
+- CSPR.click social login works for viewing/holding credentials only
+- RPC calls proxied through `/api/rpc` to avoid CORS
+- Tesseract runs entirely client-side, no server OCR
+
+## License
 
 MIT
