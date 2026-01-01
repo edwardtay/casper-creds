@@ -534,7 +534,7 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }
         return null
       }
       
-      // Run OCR (~1-3 seconds, runs locally in browser)
+      // Run OCR
       console.log('Running recognition...')
       const { data: { text: extractedText } } = await worker.recognize(base64Image)
       await worker.terminate()
@@ -542,62 +542,70 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }
       
       if (signal.aborted) return null
       
-      console.log('OCR extracted text:', extractedText.substring(0, 200) + '...')
+      console.log('OCR extracted text:', extractedText)
       
-      // Parse common credential patterns
+      // Parse credential info from extracted text
       const result: Partial<typeof form> = {}
       const text = extractedText.toLowerCase()
+      const lines = extractedText.split('\n').map((l: string) => l.trim()).filter((l: string) => l.length > 0)
       
       // Detect credential type
-      if (text.includes('degree') || text.includes('bachelor') || text.includes('master') || text.includes('phd') || text.includes('diploma')) {
-        result.type = 'degree'
-      } else if (text.includes('certificate') || text.includes('certification') || text.includes('certified')) {
-        result.type = 'certificate'
-      } else if (text.includes('license') || text.includes('licensed') || text.includes('licensure') || text.includes('engineer')) {
+      if (text.includes('license') || text.includes('licensed') || text.includes('licensure')) {
         result.type = 'license'
-      } else if (text.includes('employment') || text.includes('employee') || text.includes('work')) {
+      } else if (text.includes('degree') || text.includes('bachelor') || text.includes('master') || text.includes('phd')) {
+        result.type = 'degree'
+      } else if (text.includes('certificate') || text.includes('certification')) {
+        result.type = 'certificate'
+      } else if (text.includes('employment') || text.includes('employee')) {
         result.type = 'employment'
       }
       
-      // Extract name (common patterns)
-      const namePatterns = [
-        /(?:certify that|awarded to|granted to|this is to certify|presented to)\s+([A-Z][a-z]+\s+[A-Z][a-z]+)/i,
-        /([A-Z][a-z]+\s+[A-Z][a-z]+)\s+(?:has completed|is hereby|has been)/i
-      ]
-      for (const pattern of namePatterns) {
-        const match = extractedText.match(pattern)
-        if (match) { result.holderName = match[1].trim(); break }
+      // Extract institution - look for BOARD, UNIVERSITY, etc in uppercase or title case
+      for (const line of lines) {
+        if (/state board|university|college|institute|academy|school/i.test(line)) {
+          result.institution = line.replace(/official.*|licensing.*/i, '').trim()
+          break
+        }
       }
       
-      // Extract institution
-      const instPatterns = [
-        /state board of [\w\s]+/i,
-        /(?:university|college|institute|academy|school)\s+of\s+[\w\s]+/i,
-        /[\w\s]+(?:university|college|institute|board|academy)/i
-      ]
-      for (const pattern of instPatterns) {
-        const match = extractedText.match(pattern)
-        if (match) { result.institution = match[0].trim(); break }
+      // Extract title - look for Professional X, Bachelor of X, etc
+      for (const line of lines) {
+        if (/^professional\s+\w+/i.test(line)) {
+          result.title = line.trim()
+          break
+        }
+        if (/bachelor|master|doctor|certificate of/i.test(line)) {
+          result.title = line.trim()
+          break
+        }
       }
       
-      // Extract title
-      const titlePatterns = [
-        /professional\s+[\w\s]+(?:engineer|nurse|accountant)/i,
-        /(?:bachelor|master|doctor)\s+of\s+[\w\s]+/i,
-        /(?:certified|licensed)\s+[\w\s]+/i
-      ]
-      for (const pattern of titlePatterns) {
-        const match = extractedText.match(pattern)
-        if (match) { result.title = match[0].trim(); break }
+      // Extract holder name - look for line after "certify that" or standalone name pattern
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i]
+        // Check if this line or previous mentions "certify"
+        if (/certify|awarded to|granted to|presented to/i.test(lines[i-1] || '')) {
+          if (/^[A-Z][a-z]+\s+[A-Z][a-z]+$/.test(line)) {
+            result.holderName = line
+            break
+          }
+        }
+        // Look for standalone name (First Last pattern, not all caps)
+        if (/^[A-Z][a-z]+\s+[A-Z][a-z]+$/.test(line) && !result.holderName) {
+          result.holderName = line
+        }
       }
       
-      // Extract skills/specialization
-      const skillsMatch = extractedText.match(/(?:specialization|areas|skills)[\s:]+([^\n.]+)/i)
-      if (skillsMatch) result.skills = skillsMatch[1].trim()
+      // Extract skills - look for areas of specialization
+      const skillsLine = lines.find((l: string) => /civil|structural|mechanical|electrical|software|engineering/i.test(l))
+      if (skillsLine) {
+        result.skills = skillsLine.replace(/areas of specialization/i, '').trim()
+      }
       
       // Extract grade/status
       if (text.includes('licensed')) result.grade = 'Licensed'
-      else if (text.includes('pass')) result.grade = 'Pass'
+      else if (text.includes('passed') || text.includes('pass')) result.grade = 'Pass'
+      else if (text.includes('completed')) result.grade = 'Completed'
       
       console.log('Extracted fields:', result)
       return Object.keys(result).length > 0 ? result : null
