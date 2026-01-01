@@ -289,7 +289,17 @@ async function signAndSubmitDeploy(deploy: any, publicKey: string, clickRef?: an
 
     let signatureHex = toHex(signResult.signature)
     if (signResult.signatureHex) signatureHex = signResult.signatureHex
-    console.log('Signature Hex:', signatureHex)
+
+    // Ensure signature has the algorithm tag (01 for ed25519, 02 for secp256k1)
+    // Wallet usually returns raw 64 bytes (128 hex chars)
+    // Node expects 65 bytes (130 hex chars) with tag
+    if (signatureHex.length === 128) {
+      const tag = publicKey.substring(0, 2)
+      console.log(`Adding signature tag ${tag} to raw signature`)
+      signatureHex = tag + signatureHex
+    }
+
+    console.log('Signature Hex:', signatureHex, 'Length:', signatureHex.length)
 
     // Prepare valid approval object
     const approval = {
