@@ -162,6 +162,15 @@ export async function issueCredential(
 
     const deployJson = DeployUtil.deployToJson(deploy)
     
+    // Debug: log clickRef structure
+    console.log('clickRef:', clickRef)
+    console.log('clickRef type:', typeof clickRef)
+    if (clickRef) {
+      console.log('clickRef.send:', clickRef.send)
+      console.log('clickRef.send type:', typeof clickRef.send)
+      console.log('clickRef keys:', Object.keys(clickRef))
+    }
+    
     // Try CSPR.click SDK if available
     if (clickRef && typeof clickRef.send === 'function') {
       try {
