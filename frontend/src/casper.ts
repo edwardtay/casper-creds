@@ -389,7 +389,7 @@ export async function issueCredential(
     })
 
     let session: any;
-    const payment = DeployUtil.standardPayment(5000000000) // 5 CSPR
+    const payment = DeployUtil.standardPayment(15000000000) // 15 CSPR to be safe
 
     // Detect if we are calling a Contract Package (Versioned) or direct Contract
     // Resilience: Check for prefix OR known package hash start (in case env var is stripped)
