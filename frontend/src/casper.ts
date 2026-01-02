@@ -380,8 +380,11 @@ export async function issueCredential(
     const issuerKey = CLPublicKey.fromHex(issuerPublicKey)
     const holderKey = CLPublicKey.fromHex(holderPublicKey)
 
+    // Convert Public Key to Account Hash (Key::Account) for contract compatibility
+    const holderAccountHash = CLValueBuilder.key(holderKey)
+
     const args = RuntimeArgs.fromMap({
-      holder: holderKey,
+      holder: holderAccountHash,
       credential_type: CLValueBuilder.string(credentialType),
       title: CLValueBuilder.string(title),
       expires_at: CLValueBuilder.u64(expiresAt),
