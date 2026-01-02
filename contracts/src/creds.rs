@@ -153,9 +153,11 @@ impl CasperCreds {
         metadata_hash: String,
     ) -> U256 {
         let caller = self.env().caller();
-        let (institution, active) = self.issuers.get(&caller)
-            .unwrap_or_else(|| self.env().revert(Error::NotIssuer));
-        if !active { self.env().revert(Error::NotIssuer); }
+        
+        // DEMO MODE: Allow anyone to issue. 
+        // If registered, use their name. If not, use "Self-Issued".
+        let (institution, _) = self.issuers.get(&caller)
+            .unwrap_or(("Self-Issued".to_string(), true));
 
         let id = self.cred_count.get_or_default();
         let timestamp = self.env().get_block_time();
