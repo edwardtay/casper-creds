@@ -74,10 +74,12 @@ async function getContractHashFromPackage(): Promise<string | null> {
       const versions = data.result.stored_value.ContractPackage.versions
       if (versions && versions.length > 0) {
         const latestVersion = versions[versions.length - 1]
-        resolvedContractHash = latestVersion.contract_hash
+        // contract_hash comes as "contract-xxx", we need "hash-xxx" for queries
+        const rawHash = latestVersion.contract_hash.replace('contract-', '')
+        resolvedContractHash = `hash-${rawHash}`
         console.log('Resolved contract hash from package:', resolvedContractHash)
         
-        // Set it on the contract client
+        // Set it on the contract client (SDK expects hash- prefix)
         if (resolvedContractHash) {
           contractClient.setContractHash(resolvedContractHash)
         }
