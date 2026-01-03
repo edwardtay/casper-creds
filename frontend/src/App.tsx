@@ -15,6 +15,7 @@ import {
   uploadImageToIPFS,
   isIPFSConfigured,
   getCredentialsByHolder,
+  getTotalCredentials,
   OnChainCredential
 } from './casper'
 
@@ -31,77 +32,8 @@ interface ChainStats {
 
 type Role = null | 'issuer' | 'verifier' | 'holder'
 
-// Sample credentials - REAL on-chain credentials issued to testnet
-// These are actual credentials stored on Casper blockchain
-const SAMPLE_CREDENTIALS: Credential[] = [
-  {
-    id: '0',
-    issuer: 'account-hash-42c6ae8e85e26acdb2eed73afbb4b3143a8a3fe36c6854a79b0ec7d730b7acd8',
-    holder: 'account-hash-42c6ae8e85e26acdb2eed73afbb4b3143a8a3fe36c6854a79b0ec7d730b7acd8',
-    type: 'degree',
-    title: 'Bachelor of Science in Computer Science',
-    institution: 'CasperCreds Demo Issuer',
-    issuedAt: Date.now() - 60000,
-    expiresAt: 0,
-    revoked: false,
-    txHash: '60145ce6a20b058fd7f69060192929fa32ad9519a6b2f64821216ebd1b932127',
-    onChain: true
-  },
-  {
-    id: '1',
-    issuer: 'account-hash-42c6ae8e85e26acdb2eed73afbb4b3143a8a3fe36c6854a79b0ec7d730b7acd8',
-    holder: 'account-hash-42c6ae8e85e26acdb2eed73afbb4b3143a8a3fe36c6854a79b0ec7d730b7acd8',
-    type: 'certificate',
-    title: 'Cloud Practitioner Certification',
-    institution: 'CasperCreds Demo Issuer',
-    issuedAt: Date.now() - 50000,
-    expiresAt: 0,
-    revoked: false,
-    txHash: '301f4dd7d405fdd91c241e656973cf59cd7508e1b149896f3b4eddd35fd502da',
-    onChain: true
-  },
-  {
-    id: '2',
-    issuer: 'account-hash-42c6ae8e85e26acdb2eed73afbb4b3143a8a3fe36c6854a79b0ec7d730b7acd8',
-    holder: 'account-hash-42c6ae8e85e26acdb2eed73afbb4b3143a8a3fe36c6854a79b0ec7d730b7acd8',
-    type: 'license',
-    title: 'Professional Software Engineer License',
-    institution: 'CasperCreds Demo Issuer',
-    issuedAt: Date.now() - 40000,
-    expiresAt: 0,
-    revoked: false,
-    txHash: '5ea7b2d8ad7c083ee6f416878487ce0a7f8e64c14d04603c940c79e9ac6a9ace',
-    onChain: true
-  },
-  {
-    id: '3',
-    issuer: 'account-hash-42c6ae8e85e26acdb2eed73afbb4b3143a8a3fe36c6854a79b0ec7d730b7acd8',
-    holder: 'account-hash-42c6ae8e85e26acdb2eed73afbb4b3143a8a3fe36c6854a79b0ec7d730b7acd8',
-    type: 'employment',
-    title: 'Senior Developer - Employment Verification',
-    institution: 'CasperCreds Demo Issuer',
-    issuedAt: Date.now() - 30000,
-    expiresAt: 0,
-    revoked: false,
-    txHash: 'd4bff277c19f73c44edd6f24f69e7561c82c9006f1539b130297791960d2474d',
-    onChain: true
-  },
-  {
-    id: '4',
-    issuer: 'account-hash-42c6ae8e85e26acdb2eed73afbb4b3143a8a3fe36c6854a79b0ec7d730b7acd8',
-    holder: 'account-hash-42c6ae8e85e26acdb2eed73afbb4b3143a8a3fe36c6854a79b0ec7d730b7acd8',
-    type: 'identity',
-    title: 'Verified Identity Document',
-    institution: 'CasperCreds Demo Issuer',
-    issuedAt: Date.now() - 20000,
-    expiresAt: 0,
-    revoked: false,
-    txHash: 'b799f8997e19af0ea3e73a11a99382a26f8c6b8aadd2f9339e859352d4f4ad04',
-    onChain: true
-  }
-]
-
-const STORAGE_KEY = 'caspercreds_v5' // Real on-chain credentials only
+// No hardcoded credentials - everything comes from on-chain
+const STORAGE_KEY = 'caspercreds_v6' // Local cache for issued credentials
 
 const loadStorage = (): Credential[] => { 
   try { 
@@ -296,6 +228,14 @@ export default function App() {
 function LandingPage({ setRole, chainStats, credentials }: { setRole:(r:Role)=>void, chainStats:ChainStats|null, credentials:Credential[] }) {
   const contractReady = isContractConfigured()
   const contractHash = import.meta.env.VITE_CONTRACT_HASH?.replace('contract-package-', '') || ''
+  const [totalOnChain, setTotalOnChain] = useState(0)
+  
+  // Fetch total credentials from chain
+  useEffect(() => {
+    if (contractReady) {
+      getTotalCredentials().then(setTotalOnChain).catch(() => {})
+    }
+  }, [contractReady])
   
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-white font-sans flex flex-col">
@@ -324,7 +264,7 @@ function LandingPage({ setRole, chainStats, credentials }: { setRole:(r:Role)=>v
             <div className="p-3 bg-zinc-800/50 rounded-xl"><div className="text-xs text-zinc-500 mb-1">Block</div>{chainStats ? <div className="text-lg font-bold font-mono">{chainStats.blockHeight.toLocaleString()}</div> : <div className="h-7 bg-zinc-700/50 rounded animate-pulse"/>}</div>
             <div className="p-3 bg-zinc-800/50 rounded-xl"><div className="text-xs text-zinc-500 mb-1">Era</div>{chainStats ? <div className="text-lg font-bold font-mono">{chainStats.era.toLocaleString()}</div> : <div className="h-7 bg-zinc-700/50 rounded animate-pulse"/>}</div>
             <div className="p-3 bg-zinc-800/50 rounded-xl"><div className="text-xs text-zinc-500 mb-1">Peers</div>{chainStats ? <div className="text-lg font-bold font-mono">{chainStats.peers}</div> : <div className="h-7 bg-zinc-700/50 rounded animate-pulse"/>}</div>
-            <div className="p-3 bg-zinc-800/50 rounded-xl"><div className="text-xs text-zinc-500 mb-1">Credentials</div><div className="text-lg font-bold font-mono">{credentials.length + SAMPLE_CREDENTIALS.length}</div></div>
+            <div className="p-3 bg-zinc-800/50 rounded-xl"><div className="text-xs text-zinc-500 mb-1">Credentials</div><div className="text-lg font-bold font-mono">{totalOnChain || credentials.length}</div></div>
             <a href={`https://testnet.cspr.live/contract-package/${contractHash}`} target="_blank" rel="noopener noreferrer" className="p-3 bg-zinc-800/50 rounded-xl hover:bg-zinc-700/50 transition"><div className="text-xs text-zinc-500 mb-1">Contract ↗</div><div className="text-xs font-mono text-green-400 truncate">{contractHash ? `${contractHash.slice(0,12)}...` : '—'}</div></a>
           </div>
         </div>
@@ -386,35 +326,27 @@ function LandingPage({ setRole, chainStats, credentials }: { setRole:(r:Role)=>v
           </div>
         </div>
 
-        {/* Sample Credentials Showcase */}
+        {/* Credential Types */}
         <div className="mb-10">
-          <h2 className="text-2xl font-bold text-center mb-2">Sample Credentials</h2>
-          <p className="text-center text-zinc-500 text-sm mb-6">5 credential types • Real blockchain transactions • IPFS metadata storage</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-            {SAMPLE_CREDENTIALS.map(cred => (
-              <div key={cred.id} className="p-4 bg-zinc-900/50 rounded-xl border border-zinc-800 hover:border-zinc-700 transition">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="w-10 h-10 rounded-lg flex items-center justify-center text-xl bg-gradient-to-br from-zinc-800 to-zinc-900">
-                    {cred.type === 'degree' ? '🎓' : cred.type === 'certificate' ? '📜' : cred.type === 'license' ? '📋' : cred.type === 'employment' ? '💼' : '🪪'}
-                  </div>
-                  <span className="px-2 py-0.5 bg-green-500/20 text-green-400 text-xs rounded">⛓️ On-chain</span>
+          <h2 className="text-2xl font-bold text-center mb-2">Supported Credential Types</h2>
+          <p className="text-center text-zinc-500 text-sm mb-6">Issue any type of verifiable credential on Casper blockchain</p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+            {[
+              { type: 'degree', icon: '🎓', name: 'Degrees', desc: 'University diplomas & academic credentials' },
+              { type: 'certificate', icon: '📜', name: 'Certificates', desc: 'Professional certifications & courses' },
+              { type: 'license', icon: '📋', name: 'Licenses', desc: 'Professional & occupational licenses' },
+              { type: 'employment', icon: '💼', name: 'Employment', desc: 'Work history & job verification' },
+              { type: 'identity', icon: '🪪', name: 'Identity', desc: 'ID documents & KYC verification' }
+            ].map(item => (
+              <div key={item.type} className="p-4 bg-zinc-900/50 rounded-xl border border-zinc-800 hover:border-zinc-700 transition text-center">
+                <div className="w-12 h-12 rounded-lg flex items-center justify-center text-2xl bg-gradient-to-br from-zinc-800 to-zinc-900 mx-auto mb-3">
+                  {item.icon}
                 </div>
-                <div className="text-xs text-zinc-500 uppercase tracking-wide mb-1">{cred.type}</div>
-                <div className="font-medium text-sm mb-2 line-clamp-2">{cred.title}</div>
-                <div className="text-xs text-zinc-500 mb-3">{cred.institution}</div>
-                <a 
-                  href={`https://testnet.cspr.live/deploy/${cred.txHash}`} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300"
-                >
-                  <span>View TX</span>
-                  <span>↗</span>
-                </a>
+                <div className="font-medium text-sm mb-1">{item.name}</div>
+                <div className="text-xs text-zinc-500">{item.desc}</div>
               </div>
             ))}
           </div>
-          <p className="text-center text-zinc-600 text-xs mt-4">* Sample data for demonstration. Issue real credentials via the Issuer Portal.</p>
         </div>
 
         <div className="mb-10 p-5 bg-zinc-900/50 rounded-2xl border border-zinc-800"><h3 className="text-lg font-semibold mb-4">🔐 Security Architecture</h3>
@@ -983,11 +915,6 @@ function VerifierPortal({ credentials, setToast }: { credentials:Credential[], s
     // First check local storage
     let found = credentials.find(c => c.id === id || c.id.toLowerCase() === id.toLowerCase())
     
-    // Also check sample credentials
-    if (!found) {
-      found = SAMPLE_CREDENTIALS.find(c => c.id === id || c.id.toLowerCase() === id.toLowerCase())
-    }
-    
     // If it's a numeric ID, try on-chain verification
     if (!found && contractReady && /^\d+$/.test(id)) {
       try {
@@ -1028,7 +955,7 @@ function VerifierPortal({ credentials, setToast }: { credentials:Credential[], s
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div><form onSubmit={verify} className="p-6 bg-zinc-900/50 rounded-2xl border border-zinc-800"><h3 className="text-lg font-semibold mb-6">Verify Credential</h3><div className="space-y-4"><div><label className="block text-sm text-zinc-400 mb-2">Credential ID</label><input value={id} onChange={e=>setId(e.target.value)} placeholder="CRED-XXXXXX-XXXX" className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700 font-mono" required/></div><button disabled={loading} className="w-full py-3 bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl font-medium disabled:opacity-50">{loading ? 'Verifying...' : '✓ Verify'}</button></div></form><div className="mt-4 p-4 bg-zinc-900/30 rounded-xl border border-zinc-800"><div className="text-sm text-zinc-400 mb-2">Try sample credentials:</div><div className="flex flex-wrap gap-2">{SAMPLE_CREDENTIALS.map(c=><button key={c.id} onClick={()=>setId(c.id)} className="px-2 py-1 bg-zinc-800 hover:bg-zinc-700 rounded text-xs font-mono">{c.type}</button>)}</div></div>{credentials.length > 0 && (<div className="mt-4 p-4 bg-zinc-900/30 rounded-xl border border-zinc-800"><div className="text-sm text-zinc-400 mb-2">Your credentials:</div><div className="flex flex-wrap gap-2">{credentials.slice(-5).map(c=><button key={c.id} onClick={()=>setId(c.id)} className="px-2 py-1 bg-zinc-800 hover:bg-zinc-700 rounded text-xs font-mono">{c.id}</button>)}</div></div>)}</div>
+          <div><form onSubmit={verify} className="p-6 bg-zinc-900/50 rounded-2xl border border-zinc-800"><h3 className="text-lg font-semibold mb-6">Verify Credential</h3><div className="space-y-4"><div><label className="block text-sm text-zinc-400 mb-2">Credential ID (numeric)</label><input value={id} onChange={e=>setId(e.target.value)} placeholder="0, 1, 2..." className="w-full px-4 py-3 bg-zinc-800 rounded-xl border border-zinc-700 font-mono" required/></div><button disabled={loading} className="w-full py-3 bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl font-medium disabled:opacity-50">{loading ? 'Verifying...' : '✓ Verify On-Chain'}</button></div></form><div className="mt-4 p-4 bg-zinc-900/30 rounded-xl border border-zinc-800"><div className="text-sm text-zinc-400 mb-2">Enter numeric credential ID to verify on-chain</div><div className="flex flex-wrap gap-2">{[0,1,2,3,4].map(i=><button key={i} onClick={()=>setId(i.toString())} className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded text-sm font-mono">{i}</button>)}</div></div>{credentials.length > 0 && (<div className="mt-4 p-4 bg-zinc-900/30 rounded-xl border border-zinc-800"><div className="text-sm text-zinc-400 mb-2">Your issued credentials:</div><div className="flex flex-wrap gap-2">{credentials.slice(-5).map(c=><button key={c.id} onClick={()=>setId(c.chainId?.toString() || c.id)} className="px-2 py-1 bg-zinc-800 hover:bg-zinc-700 rounded text-xs font-mono">{c.chainId ?? c.id}</button>)}</div></div>)}</div>
           <div>{result ? (<div ref={certRef} className={`p-6 rounded-2xl border ${!result.revoked?'bg-green-950/30 border-green-800/50':'bg-red-950/30 border-red-800/50'}`}><div className="flex items-center justify-between mb-6"><div className="flex items-center gap-4"><div className={`w-14 h-14 rounded-xl flex items-center justify-center text-2xl ${!result.revoked?'bg-green-500/20':'bg-red-500/20'}`}>{!result.revoked?'✓':'✗'}</div><div><div className="text-xl font-bold">{!result.revoked?'Valid':'Revoked'}</div><div className="text-sm text-zinc-400">Verified on Casper</div></div></div><QRCodeSVG value={`${window.location.origin}?id=${result.id}`} size={70} bgColor="transparent" fgColor="#fff"/></div><div className="grid grid-cols-2 gap-3 mb-4"><div className="p-3 bg-zinc-900/50 rounded-lg"><div className="text-xs text-zinc-500">Title</div><div className="font-medium text-sm">{result.title}</div></div><div className="p-3 bg-zinc-900/50 rounded-lg"><div className="text-xs text-zinc-500">Institution</div><div className="font-medium text-sm">{result.institution}</div></div><div className="p-3 bg-zinc-900/50 rounded-lg"><div className="text-xs text-zinc-500">Type</div><div className="font-medium text-sm capitalize">{result.type}</div></div><div className="p-3 bg-zinc-900/50 rounded-lg"><div className="text-xs text-zinc-500">Issued</div><div className="font-medium text-sm">{new Date(result.issuedAt).toLocaleDateString()}</div></div></div><div className="p-3 bg-zinc-900/50 rounded-lg mb-3"><div className="text-xs text-zinc-500">Credential ID</div><code className="text-sm">{result.id}</code></div>{result.txHash && <div className="p-3 bg-zinc-900/50 rounded-lg mb-3"><div className="text-xs text-zinc-500">Transaction Hash ↗</div><a href={`https://testnet.cspr.live/deploy/${result.txHash}`} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-400 hover:text-blue-300 font-mono break-all">{result.txHash}</a></div>}{result.signature && <div className="p-3 bg-zinc-900/50 rounded-lg mb-4"><div className="text-xs text-zinc-500">Signature</div><code className="text-xs text-zinc-400 break-all">{result.signature}</code></div>}<div className="flex gap-3"><button onClick={exportPDF} className="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm">📄 Export PDF</button><button onClick={()=>{navigator.clipboard.writeText(result.id);setToast({t:'ok',m:'Copied'})}} className="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm">📋 Copy ID</button></div></div>) : (<div className="h-full min-h-[300px] flex items-center justify-center bg-zinc-900/30 rounded-2xl border border-dashed border-zinc-800"><div className="text-center text-zinc-500"><div className="text-5xl mb-4">🔍</div><div>Enter credential ID to verify</div></div></div>)}</div>
         </div>
     </div>
