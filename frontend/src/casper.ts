@@ -19,15 +19,22 @@ const contractClient = new Contracts.Contract(casperClient)
 
 // Set contract hash if available
 if (CONTRACT_HASH) {
-  // Standard contract hash configuration
-  // Note: For versioned calls, we handle logic in specific functions manually
+  // For contract-package (versioned), we need to get the actual contract hash
+  // The SDK needs hash- format for queries
   let cleanHash = CONTRACT_HASH
-  if (cleanHash.startsWith('contract-package-')) cleanHash = cleanHash.replace('contract-package-', 'hash-')
-  else if (cleanHash.startsWith('contract-')) cleanHash = cleanHash.replace('contract-', 'hash-')
-  else if (!cleanHash.startsWith('hash-')) cleanHash = 'hash-' + cleanHash
-
-  // contractClient.setContractHash(cleanHash) // This expects hash- format
-  // We'll leave it for now as some other functions might use it as standard contract
+  if (cleanHash.startsWith('contract-package-')) {
+    cleanHash = cleanHash.replace('contract-package-', 'hash-')
+  } else if (cleanHash.startsWith('contract-')) {
+    cleanHash = cleanHash.replace('contract-', 'hash-')
+  } else if (!cleanHash.startsWith('hash-')) {
+    cleanHash = 'hash-' + cleanHash
+  }
+  
+  try {
+    contractClient.setContractHash(cleanHash)
+  } catch (e) {
+    console.warn('Failed to set contract hash:', e)
+  }
 }
 
 export interface OnChainCredential {
@@ -56,8 +63,30 @@ export interface VerificationResult {
 export async function getTotalCredentials(): Promise<number> {
   try {
     if (!CONTRACT_HASH) return 0
-    const result = await contractClient.queryContractData(['cred_count'])
-    return parseInt(result.toString())
+    
+    // Use RPC to query contract state
+    const rpcUrl = getRpcUrl()
+    const packageHash = CONTRACT_HASH.replace('contract-package-', '').replace('hash-', '')
+    
+    const response = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'query_global_state',
+        params: {
+          state_identifier: null,
+          key: `hash-${packageHash}`,
+          path: ['cred_count']
+        },
+        id: Date.now()
+      })
+    })
+    const data = await response.json()
+    if (data.result?.stored_value?.CLValue?.parsed) {
+      return parseInt(data.result.stored_value.CLValue.parsed)
+    }
+    return 0
   } catch (e) {
     console.error('Error getting total:', e)
     return 0
@@ -125,41 +154,28 @@ export async function getCredentialsByHolder(holderPublicKey: string): Promise<O
   try {
     if (!CONTRACT_HASH) return []
     
-    // Convert public key to account hash for dictionary lookup
+    // Convert public key to account hash for comparison
     const holderKey = CLPublicKey.fromHex(holderPublicKey)
     const accountHash = holderKey.toAccountHashStr().replace('account-hash-', '')
     
     console.log('Querying credentials for holder:', accountHash)
     
-    // Try to get holder's credential IDs from the holder_creds dictionary
-    try {
-      const holderCreds = await contractClient.queryContractDictionary('holder_creds', accountHash)
-      if (holderCreds && holderCreds.data) {
-        const credIds = holderCreds.data as any[]
-        console.log('Found credential IDs:', credIds)
-        
-        // Fetch each credential
-        const credentials: OnChainCredential[] = []
-        for (const id of credIds) {
-          const cred = await getCredentialFromChain(parseInt(id.toString()))
-          if (cred) credentials.push(cred)
-        }
-        return credentials
-      }
-    } catch (dictError) {
-      console.log('Dictionary lookup failed, trying scan approach')
-    }
-    
-    // Fallback: scan recent credentials (up to 100)
+    // Scan credentials (new contract, won't have many)
     const total = await getTotalCredentials()
+    console.log('Total credentials on chain:', total)
+    
     const credentials: OnChainCredential[] = []
     const scanLimit = Math.min(total, 100)
     
     for (let i = 0; i < scanLimit; i++) {
       try {
         const cred = await getCredentialFromChain(i)
-        if (cred && cred.holder.toLowerCase().includes(accountHash.toLowerCase())) {
-          credentials.push(cred)
+        if (cred) {
+          // Check if holder matches (account hash comparison)
+          const credHolderHash = cred.holder.replace('account-hash-', '').toLowerCase()
+          if (credHolderHash.includes(accountHash.toLowerCase()) || accountHash.toLowerCase().includes(credHolderHash)) {
+            credentials.push(cred)
+          }
         }
       } catch (e) {
         // Skip failed lookups
