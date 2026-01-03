@@ -120,6 +120,59 @@ export async function getCredentialFromChain(credentialId: number): Promise<OnCh
   }
 }
 
+// Get all credentials for a holder by querying the chain
+export async function getCredentialsByHolder(holderPublicKey: string): Promise<OnChainCredential[]> {
+  try {
+    if (!CONTRACT_HASH) return []
+    
+    // Convert public key to account hash for dictionary lookup
+    const holderKey = CLPublicKey.fromHex(holderPublicKey)
+    const accountHash = holderKey.toAccountHashStr().replace('account-hash-', '')
+    
+    console.log('Querying credentials for holder:', accountHash)
+    
+    // Try to get holder's credential IDs from the holder_creds dictionary
+    try {
+      const holderCreds = await contractClient.queryContractDictionary('holder_creds', accountHash)
+      if (holderCreds && holderCreds.data) {
+        const credIds = holderCreds.data as any[]
+        console.log('Found credential IDs:', credIds)
+        
+        // Fetch each credential
+        const credentials: OnChainCredential[] = []
+        for (const id of credIds) {
+          const cred = await getCredentialFromChain(parseInt(id.toString()))
+          if (cred) credentials.push(cred)
+        }
+        return credentials
+      }
+    } catch (dictError) {
+      console.log('Dictionary lookup failed, trying scan approach')
+    }
+    
+    // Fallback: scan recent credentials (up to 100)
+    const total = await getTotalCredentials()
+    const credentials: OnChainCredential[] = []
+    const scanLimit = Math.min(total, 100)
+    
+    for (let i = 0; i < scanLimit; i++) {
+      try {
+        const cred = await getCredentialFromChain(i)
+        if (cred && cred.holder.toLowerCase().includes(accountHash.toLowerCase())) {
+          credentials.push(cred)
+        }
+      } catch (e) {
+        // Skip failed lookups
+      }
+    }
+    
+    return credentials
+  } catch (e) {
+    console.error('Error getting credentials by holder:', e)
+    return []
+  }
+}
+
 
 // Helper to sign and submit deploy via CSPR.click or Casper Wallet
 async function signAndSubmitDeploy(deploy: any, publicKey: string, clickRef?: any): Promise<string> {

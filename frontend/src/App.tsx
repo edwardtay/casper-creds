@@ -13,7 +13,9 @@ import {
   waitForDeploy,
   uploadToIPFS,
   uploadImageToIPFS,
-  isIPFSConfigured
+  isIPFSConfigured,
+  getCredentialsByHolder,
+  OnChainCredential
 } from './casper'
 
 interface Credential {
@@ -1035,8 +1037,50 @@ function VerifierPortal({ credentials, setToast }: { credentials:Credential[], s
 
 function HolderPortal({ pubKey, credentials, setToast }: { pubKey:string, credentials:Credential[], setToast:(t:any)=>void }) {
   const [selected, setSelected] = useState<Credential|null>(null)
+  const [chainCreds, setChainCreds] = useState<OnChainCredential[]>([])
+  const [loading, setLoading] = useState(false)
   const certRef = useRef<HTMLDivElement>(null)
-  const myCreds = credentials.filter(c => c.holder === pubKey)
+  
+  // Combine local and chain credentials
+  const localCreds = credentials.filter(c => c.holder === pubKey)
+  
+  // Fetch credentials from chain when pubKey changes
+  useEffect(() => {
+    if (pubKey && isContractConfigured()) {
+      setLoading(true)
+      getCredentialsByHolder(pubKey)
+        .then(creds => {
+          console.log('Fetched chain credentials:', creds)
+          setChainCreds(creds)
+        })
+        .catch(e => console.error('Failed to fetch chain creds:', e))
+        .finally(() => setLoading(false))
+    }
+  }, [pubKey])
+  
+  // Convert chain credentials to local format and merge
+  const chainCredsAsLocal: Credential[] = chainCreds.map(c => ({
+    id: c.id,
+    issuer: c.issuer,
+    holder: c.holder,
+    type: c.credType,
+    title: c.title,
+    institution: c.institution,
+    issuedAt: c.issuedAt,
+    expiresAt: c.expiresAt,
+    revoked: c.revoked,
+    onChain: true
+  }))
+  
+  // Merge and dedupe by ID
+  const allCreds = [...localCreds]
+  chainCredsAsLocal.forEach(cc => {
+    if (!allCreds.find(lc => lc.id === cc.id)) {
+      allCreds.push(cc)
+    }
+  })
+  
+  const myCreds = allCreds
 
   const exportPDF = async (cred: Credential) => { setSelected(cred); await new Promise(r=>setTimeout(r,100)); if (!certRef.current) return; const canvas = await html2canvas(certRef.current, { backgroundColor: '#0a0a0f' }); const pdf = new jsPDF('l', 'mm', 'a4'); pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 10, 10, 277, 150); pdf.save(`credential-${cred.id}.pdf`); setToast({t:'ok', m:'PDF exported'}) }
 
@@ -1044,8 +1088,10 @@ function HolderPortal({ pubKey, credentials, setToast }: { pubKey:string, creden
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between"><h2 className="text-xl font-semibold">My Credentials</h2><div className="text-sm text-zinc-500">{myCreds.length} credential(s)</div></div>
-      {myCreds.length === 0 ? (<div className="text-center py-20 bg-zinc-900/30 rounded-2xl border border-dashed border-zinc-800"><div className="text-6xl mb-4">📭</div><h3 className="text-xl font-semibold mb-2">No Credentials Yet</h3><p className="text-zinc-400">Credentials issued to your address will appear here</p><p className="text-sm text-zinc-500 mt-4 font-mono">{pubKey.slice(0,20)}...</p></div>) : (
+      <div className="flex items-center justify-between"><h2 className="text-xl font-semibold">My Credentials</h2><div className="text-sm text-zinc-500">{loading ? 'Loading...' : `${myCreds.length} credential(s)`}</div></div>
+      {loading ? (
+        <div className="text-center py-20 bg-zinc-900/30 rounded-2xl border border-dashed border-zinc-800"><div className="text-4xl mb-4 animate-spin">⏳</div><h3 className="text-xl font-semibold mb-2">Loading Credentials</h3><p className="text-zinc-400">Querying blockchain for your credentials...</p></div>
+      ) : myCreds.length === 0 ? (<div className="text-center py-20 bg-zinc-900/30 rounded-2xl border border-dashed border-zinc-800"><div className="text-6xl mb-4">📭</div><h3 className="text-xl font-semibold mb-2">No Credentials Yet</h3><p className="text-zinc-400">Credentials issued to your address will appear here</p><p className="text-sm text-zinc-500 mt-4 font-mono">{pubKey.slice(0,20)}...</p></div>) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">{myCreds.map(c=>(<div key={c.id} className="p-5 bg-zinc-900/50 rounded-2xl border border-zinc-800 hover:border-zinc-700 transition group"><div className="flex items-start justify-between mb-4"><div className="w-12 h-12 bg-green-500/20 rounded-xl flex items-center justify-center text-2xl">{c.type==='degree'?'🎓':c.type==='certificate'?'📜':c.type==='license'?'📋':'💼'}</div><span className={`px-2 py-1 rounded text-xs ${c.revoked?'bg-red-500/20 text-red-400':'bg-green-500/20 text-green-400'}`}>{c.revoked?'Revoked':'Valid'}</span></div><div className="font-semibold mb-1">{c.title}</div><div className="text-sm text-zinc-500 mb-3">{c.institution}</div><div className="text-xs text-zinc-600 font-mono mb-4">{c.id}</div><div className="flex gap-2 opacity-0 group-hover:opacity-100 transition"><button onClick={()=>setSelected(c)} className="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-xs">View</button><button onClick={()=>exportPDF(c)} className="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-xs">PDF</button><button onClick={()=>{navigator.clipboard.writeText(`${window.location.origin}?id=${c.id}`);setToast({t:'ok',m:'Link copied'})}} className="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-xs">Share</button></div></div>))}</div>
       )}
       {selected && (<div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={()=>setSelected(null)}><div ref={certRef} onClick={e=>e.stopPropagation()} className="bg-zinc-900 rounded-2xl p-6 max-w-lg w-full border border-zinc-700 max-h-[90vh] overflow-y-auto"><div className="flex items-center justify-between mb-6"><div className="flex items-center gap-3"><div className="w-14 h-14 bg-green-500/20 rounded-xl flex items-center justify-center text-2xl">{selected.type==='degree'?'🎓':selected.type==='certificate'?'📜':'📋'}</div><div><div className="font-bold">{selected.title}</div><div className="text-sm text-zinc-400">{selected.institution}</div></div></div><QRCodeSVG value={`${window.location.origin}?id=${selected.id}`} size={80} bgColor="transparent" fgColor="#fff"/></div><div className="grid grid-cols-2 gap-3 mb-4"><div className="p-3 bg-zinc-800 rounded-lg"><div className="text-xs text-zinc-500">Type</div><div className="capitalize">{selected.type}</div></div><div className="p-3 bg-zinc-800 rounded-lg"><div className="text-xs text-zinc-500">Status</div><div className={selected.revoked?'text-red-400':'text-green-400'}>{selected.revoked?'Revoked':'Valid'}</div></div><div className="p-3 bg-zinc-800 rounded-lg"><div className="text-xs text-zinc-500">Issued</div><div>{new Date(selected.issuedAt).toLocaleDateString()}</div></div><div className="p-3 bg-zinc-800 rounded-lg"><div className="text-xs text-zinc-500">Expires</div><div>{selected.expiresAt?new Date(selected.expiresAt).toLocaleDateString():'Never'}</div></div></div><div className="p-3 bg-zinc-800 rounded-lg mb-3"><div className="text-xs text-zinc-500">Credential ID</div><code className="text-sm">{selected.id}</code></div>{selected.txHash && <div className="p-3 bg-zinc-800 rounded-lg mb-3"><div className="text-xs text-zinc-500">Transaction Hash ↗</div><a href={`https://testnet.cspr.live/deploy/${selected.txHash}`} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-400 hover:text-blue-300 font-mono break-all">{selected.txHash}</a></div>}{selected.signature && <div className="p-3 bg-zinc-800 rounded-lg mb-4"><div className="text-xs text-zinc-500">Signature</div><code className="text-xs text-zinc-400 break-all">{selected.signature}</code></div>}<div className="flex gap-3"><button onClick={()=>exportPDF(selected)} className="flex-1 py-3 bg-green-600 hover:bg-green-700 rounded-xl">📄 Export PDF</button><button onClick={()=>{navigator.clipboard.writeText(`${window.location.origin}?id=${selected.id}`);setToast({t:'ok',m:'Copied'})}} className="flex-1 py-3 bg-zinc-800 hover:bg-zinc-700 rounded-xl">🔗 Share</button><button onClick={()=>setSelected(null)} className="px-4 py-3 bg-zinc-800 hover:bg-zinc-700 rounded-xl">×</button></div></div></div>)}
