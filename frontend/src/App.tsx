@@ -1158,6 +1158,7 @@ function HolderPortal({ pubKey, credentials, setToast }: { pubKey:string, creden
                     {c.revoked ? '✗ Revoked' : '✓ Valid'}
                   </span>
                   {c.onChain && <span className="px-2 py-0.5 bg-purple-500/20 text-purple-400 text-xs rounded border border-purple-500/30">⛓ On-Chain</span>}
+                  {c.onChain && <span className="px-2 py-0.5 bg-amber-500/20 text-amber-400 text-xs rounded border border-amber-500/30">🎨 NFT</span>}
                 </div>
               </div>
 
@@ -1197,6 +1198,17 @@ function HolderPortal({ pubKey, credentials, setToast }: { pubKey:string, creden
       {selected && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setSelected(null)}>
           <div ref={certRef} onClick={e => e.stopPropagation()} className={`bg-gradient-to-br ${getTypeColor(selected.type)} rounded-3xl p-8 max-w-2xl w-full border shadow-2xl max-h-[90vh] overflow-y-auto`}>
+            {/* NFT Header Badge */}
+            <div className="flex justify-between items-start mb-4">
+              <div className="px-3 py-1.5 bg-amber-500/20 border border-amber-500/30 rounded-full text-amber-400 text-xs font-medium flex items-center gap-1.5">
+                🎨 Credential NFT
+              </div>
+              <div className="text-right">
+                <div className="text-xs text-zinc-500">Token ID</div>
+                <div className="font-mono text-sm text-zinc-300">#{selected.id}</div>
+              </div>
+            </div>
+            
             {/* Certificate Header */}
             <div className="text-center mb-6 pb-6 border-b border-white/10">
               <div className="w-20 h-20 bg-white/10 backdrop-blur rounded-2xl flex items-center justify-center text-4xl mx-auto mb-4 shadow-lg">
@@ -1265,8 +1277,8 @@ function HolderPortal({ pubKey, credentials, setToast }: { pubKey:string, creden
             {/* Blockchain Info */}
             <div className="space-y-3 mb-6">
               <div className="p-4 bg-zinc-900/50 rounded-xl">
-                <div className="text-xs text-zinc-500 mb-1">Credential ID</div>
-                <code className="text-sm text-zinc-300">{selected.id}</code>
+                <div className="text-xs text-zinc-500 mb-1">Credential ID / Token ID</div>
+                <code className="text-sm text-zinc-300">#{selected.id}</code>
               </div>
               {selected.metadataHash && (
                 <div className="p-4 bg-zinc-900/50 rounded-xl">

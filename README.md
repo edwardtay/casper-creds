@@ -24,6 +24,7 @@ CasperCreds brings verifiable credentials to the blockchain:
 - ✅ **Tamper-proof** — Immutable on-chain records
 - ✅ **Decentralized** — No single point of failure
 - ✅ **Privacy-preserving** — Holder controls sharing
+- ✅ **NFT Credentials** — Each credential is a unique digital collectible
 
 ---
 
