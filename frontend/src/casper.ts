@@ -90,12 +90,9 @@ export interface VerificationResult {
 }
 
 
-// Get total credentials count from contract
-export async function getTotalCredentials(): Promise<number> {
+// Get events length from contract's __events_length named key
+async function getEventsLength(): Promise<number> {
   try {
-    if (!CONTRACT_HASH) return 0
-    
-    // Ensure contract hash is resolved
     const contractHash = await getContractHashFromPackage()
     if (!contractHash) return 0
     
@@ -109,20 +106,239 @@ export async function getTotalCredentials(): Promise<number> {
         params: {
           state_root_hash: null,
           key: contractHash,
-          path: ['cred_count']
+          path: ['__events_length']
         },
         id: Date.now()
       })
     })
     const data = await response.json()
-    console.log('cred_count query result:', data)
+    console.log('__events_length result:', data)
     
     if (data.result?.stored_value?.CLValue?.parsed) {
-      const count = parseInt(data.result.stored_value.CLValue.parsed)
-      console.log('Total credentials on chain:', count)
-      return count
+      return parseInt(data.result.stored_value.CLValue.parsed)
     }
     return 0
+  } catch (e) {
+    console.error('Error getting events length:', e)
+    return 0
+  }
+}
+
+// Get the __events dictionary URef from contract
+async function getEventsDictURef(): Promise<string | null> {
+  try {
+    const contractHash = await getContractHashFromPackage()
+    if (!contractHash) return null
+    
+    const rpcUrl = getRpcUrl()
+    // Query the contract to get its named keys
+    const response = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'state_get_item',
+        params: {
+          state_root_hash: null,
+          key: contractHash,
+          path: []
+        },
+        id: Date.now()
+      })
+    })
+    const data = await response.json()
+    console.log('Contract state:', data)
+    
+    // Find __events in named_keys
+    const namedKeys = data.result?.stored_value?.Contract?.named_keys || []
+    const eventsKey = namedKeys.find((nk: any) => nk.name === '__events')
+    if (eventsKey) {
+      console.log('Found __events URef:', eventsKey.key)
+      return eventsKey.key
+    }
+    return null
+  } catch (e) {
+    console.error('Error getting events dict:', e)
+    return null
+  }
+}
+
+// Parse Odra event from raw bytes/data
+// Odra uses Casper Event Standard (CES) which stores events as serialized structs
+function parseCredentialIssuedEvent(eventData: any): OnChainCredential | null {
+  try {
+    console.log('Parsing event data:', JSON.stringify(eventData, null, 2))
+    
+    // Handle different possible formats
+    let parsed = eventData
+    if (typeof eventData === 'string') {
+      // Could be hex bytes or JSON string
+      if (eventData.startsWith('{')) {
+        try { parsed = JSON.parse(eventData) } catch {}
+      }
+    }
+    
+    // Odra CES format: events are stored with a type discriminator
+    // Format could be: { "CredentialIssued": { id, issuer, holder, ... } }
+    // Or: { name: "CredentialIssued", data: { ... } }
+    // Or: [ type_index, { ... } ] (tuple format)
+    
+    // Check for named event format
+    if (parsed?.CredentialIssued) {
+      const d = parsed.CredentialIssued
+      return extractCredentialFromData(d)
+    }
+    
+    // Check for name/data format
+    if (parsed?.name === 'CredentialIssued' && parsed?.data) {
+      return extractCredentialFromData(parsed.data)
+    }
+    
+    // Check for array/tuple format [type, data]
+    if (Array.isArray(parsed) && parsed.length >= 2) {
+      const [typeOrName, data] = parsed
+      if (typeOrName === 'CredentialIssued' || typeOrName === 0) {
+        return extractCredentialFromData(data)
+      }
+    }
+    
+    // Check if it's directly the credential data (has id, holder, issuer)
+    if (parsed?.id !== undefined && parsed?.holder !== undefined && parsed?.issuer !== undefined) {
+      return extractCredentialFromData(parsed)
+    }
+    
+    // Check for nested data
+    if (parsed?.data && parsed.data?.id !== undefined) {
+      return extractCredentialFromData(parsed.data)
+    }
+    
+    // Log unrecognized format for debugging
+    console.log('Unrecognized event format, skipping')
+    return null
+  } catch (e) {
+    console.error('Error parsing event:', e)
+    return null
+  }
+}
+
+// Helper to extract credential from various data formats
+function extractCredentialFromData(d: any): OnChainCredential | null {
+  if (!d) return null
+  
+  // Handle Address format - Odra stores as { Account: "hash" } or { Contract: "hash" }
+  const extractAddress = (addr: any): string => {
+    if (typeof addr === 'string') return addr
+    if (addr?.Account) return `account-hash-${addr.Account}`
+    if (addr?.Contract) return `contract-${addr.Contract}`
+    if (addr?.data) return extractAddress(addr.data)
+    return ''
+  }
+  
+  // Handle U256 format - could be string, number, or { value: ... }
+  const extractU256 = (val: any): string => {
+    if (typeof val === 'string') return val
+    if (typeof val === 'number') return String(val)
+    if (val?.value) return String(val.value)
+    return '0'
+  }
+  
+  return {
+    id: extractU256(d.id),
+    issuer: extractAddress(d.issuer),
+    holder: extractAddress(d.holder),
+    credType: d.cred_type || d.credential_type || '',
+    title: d.title || '',
+    institution: d.institution || '',
+    issuedAt: parseInt(d.timestamp || d.issued_at || '0'),
+    expiresAt: parseInt(d.expires_at || '0'),
+    revoked: d.revoked || false,
+    metadataHash: d.metadata_hash || ''
+  }
+}
+
+// Fetch a single event by index from __events dictionary
+async function getEventByIndex(dictURef: string, index: number): Promise<any> {
+  try {
+    const rpcUrl = getRpcUrl()
+    const response = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'state_get_dictionary_item',
+        params: {
+          state_root_hash: null,
+          dictionary_identifier: {
+            URef: {
+              seed_uref: dictURef,
+              dictionary_item_key: index.toString()
+            }
+          }
+        },
+        id: Date.now()
+      })
+    })
+    const data = await response.json()
+    console.log(`Event ${index}:`, data)
+    
+    if (data.result?.stored_value?.CLValue) {
+      return data.result.stored_value.CLValue.parsed || data.result.stored_value.CLValue.bytes
+    }
+    return null
+  } catch (e) {
+    console.error(`Error fetching event ${index}:`, e)
+    return null
+  }
+}
+
+// Get all CredentialIssued events from chain
+export async function getCredentialEvents(): Promise<OnChainCredential[]> {
+  try {
+    if (!CONTRACT_HASH) return []
+    
+    const eventsLength = await getEventsLength()
+    console.log('Total events on chain:', eventsLength)
+    if (eventsLength === 0) return []
+    
+    const dictURef = await getEventsDictURef()
+    if (!dictURef) {
+      console.log('Could not find __events dictionary')
+      return []
+    }
+    
+    const credentials: OnChainCredential[] = []
+    
+    // Fetch events (limit to last 100 for performance)
+    const startIdx = Math.max(0, eventsLength - 100)
+    for (let i = startIdx; i < eventsLength; i++) {
+      const eventData = await getEventByIndex(dictURef, i)
+      if (eventData) {
+        const cred = parseCredentialIssuedEvent(eventData)
+        if (cred) {
+          credentials.push(cred)
+        }
+      }
+    }
+    
+    return credentials
+  } catch (e) {
+    console.error('Error getting credential events:', e)
+    return []
+  }
+}
+
+// Get total credentials count from events
+export async function getTotalCredentials(): Promise<number> {
+  try {
+    if (!CONTRACT_HASH) return 0
+    
+    // Count CredentialIssued events
+    const eventsLength = await getEventsLength()
+    console.log('Total events on chain:', eventsLength)
+    
+    // For now, return events count as approximation
+    // (In production, you'd filter for CredentialIssued events only)
+    return eventsLength
   } catch (e) {
     console.error('Error getting total:', e)
     return 0
@@ -193,40 +409,29 @@ export async function getCredentialFromChain(credentialId: number): Promise<OnCh
   }
 }
 
-// Get all credentials for a holder by querying the chain
+// Get all credentials for a holder by querying events
 export async function getCredentialsByHolder(holderPublicKey: string): Promise<OnChainCredential[]> {
   try {
     if (!CONTRACT_HASH) return []
     
     // Convert public key to account hash for comparison
     const holderKey = CLPublicKey.fromHex(holderPublicKey)
-    const accountHash = holderKey.toAccountHashStr().replace('account-hash-', '')
+    const accountHash = holderKey.toAccountHashStr().replace('account-hash-', '').toLowerCase()
     
     console.log('Querying credentials for holder:', accountHash)
     
-    // Scan credentials (new contract, won't have many)
-    const total = await getTotalCredentials()
-    console.log('Total credentials on chain:', total)
+    // Get all credential events
+    const allCreds = await getCredentialEvents()
+    console.log('All credential events:', allCreds.length)
     
-    const credentials: OnChainCredential[] = []
-    const scanLimit = Math.min(total, 100)
+    // Filter by holder
+    const holderCreds = allCreds.filter(cred => {
+      const credHolder = cred.holder.replace('account-hash-', '').toLowerCase()
+      return credHolder.includes(accountHash) || accountHash.includes(credHolder)
+    })
     
-    for (let i = 0; i < scanLimit; i++) {
-      try {
-        const cred = await getCredentialFromChain(i)
-        if (cred) {
-          // Check if holder matches (account hash comparison)
-          const credHolderHash = cred.holder.replace('account-hash-', '').toLowerCase()
-          if (credHolderHash.includes(accountHash.toLowerCase()) || accountHash.toLowerCase().includes(credHolderHash)) {
-            credentials.push(cred)
-          }
-        }
-      } catch (e) {
-        // Skip failed lookups
-      }
-    }
-    
-    return credentials
+    console.log('Credentials for holder:', holderCreds.length)
+    return holderCreds
   } catch (e) {
     console.error('Error getting credentials by holder:', e)
     return []
