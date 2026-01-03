@@ -501,10 +501,18 @@ export async function getCredentialsByHolder(holderPublicKey: string): Promise<O
     const allCreds = await getCredentialEvents()
     console.log('All credential events:', allCreds.length)
     
-    // Filter by holder
+    // Filter by holder - compare just the hash part, ignoring prefix
     const holderCreds = allCreds.filter(cred => {
-      const credHolder = cred.holder.replace('account-hash-', '').toLowerCase()
-      return credHolder.includes(accountHash) || accountHash.includes(credHolder)
+      // Extract just the hash part from holder (remove any prefix)
+      const credHolderHash = cred.holder
+        .replace('account-hash-', '')
+        .replace('contract-', '')
+        .toLowerCase()
+      
+      console.log('Comparing:', accountHash, 'vs', credHolderHash)
+      return credHolderHash === accountHash || 
+             credHolderHash.includes(accountHash) || 
+             accountHash.includes(credHolderHash)
     })
     
     console.log('Credentials for holder:', holderCreds.length)
