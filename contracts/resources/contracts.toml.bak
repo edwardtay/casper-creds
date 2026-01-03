@@ -1,0 +1,5 @@
+last_updated = "2026-01-01T05:52:25Z"
+
+[[contracts]]
+name = "CasperCreds"
+package_hash = "hash-fc4506f2d996605cbb8d4e06158b8d4320433e2dde4dc766f65115911ac98973"

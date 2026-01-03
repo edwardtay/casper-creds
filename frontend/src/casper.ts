@@ -380,11 +380,19 @@ export async function issueCredential(
     const issuerKey = CLPublicKey.fromHex(issuerPublicKey)
     const holderKey = CLPublicKey.fromHex(holderPublicKey)
 
-    // Convert Public Key to Account Hash (Key::Account) for contract compatibility
-    const holderAccountHash = CLValueBuilder.key(holderKey)
+    // Odra's Address type is a tagged union: 0x00 + account_hash (for accounts)
+    // Get the raw account hash (32 bytes)
+    const holderAccountHashHex = holderKey.toAccountHashStr().replace('account-hash-', '')
+    
+    console.log('Holder public key:', holderPublicKey)
+    console.log('Holder account hash hex:', holderAccountHashHex)
+
+    // For Odra Address, we need to pass it as Key::Account
+    // The casper-js-sdk CLValueBuilder.key() should handle this correctly
+    const holderAsKey = CLValueBuilder.key(holderKey)
 
     const args = RuntimeArgs.fromMap({
-      holder: holderAccountHash,
+      holder: holderAsKey,
       credential_type: CLValueBuilder.string(credentialType),
       title: CLValueBuilder.string(title),
       expires_at: CLValueBuilder.u64(expiresAt),
