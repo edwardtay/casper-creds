@@ -294,41 +294,6 @@ function parseCredentialIssuedEvent(eventData: any): OnChainCredential | null {
   }
 }
 
-// Helper to extract credential from various data formats (fallback)
-function extractCredentialFromData(d: any): OnChainCredential | null {
-  if (!d) return null
-  
-  // Handle Address format - Odra stores as { Account: "hash" } or { Contract: "hash" }
-  const extractAddress = (addr: any): string => {
-    if (typeof addr === 'string') return addr
-    if (addr?.Account) return `account-hash-${addr.Account}`
-    if (addr?.Contract) return `contract-${addr.Contract}`
-    if (addr?.data) return extractAddress(addr.data)
-    return ''
-  }
-  
-  // Handle U256 format - could be string, number, or { value: ... }
-  const extractU256 = (val: any): string => {
-    if (typeof val === 'string') return val
-    if (typeof val === 'number') return String(val)
-    if (val?.value) return String(val.value)
-    return '0'
-  }
-  
-  return {
-    id: extractU256(d.id),
-    issuer: extractAddress(d.issuer),
-    holder: extractAddress(d.holder),
-    credType: d.cred_type || d.credential_type || '',
-    title: d.title || '',
-    institution: d.institution || '',
-    issuedAt: parseInt(d.timestamp || d.issued_at || '0'),
-    expiresAt: parseInt(d.expires_at || '0'),
-    revoked: d.revoked || false,
-    metadataHash: d.metadata_hash || ''
-  }
-}
-
 // Fetch a single event by index from __events dictionary
 async function getEventByIndex(dictURef: string, index: number): Promise<any> {
   try {
