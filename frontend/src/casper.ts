@@ -17,25 +17,56 @@ const getRpcUrl = () => {
 const casperClient = new CasperClient(getRpcUrl())
 const contractClient = new Contracts.Contract(casperClient)
 
-// Set contract hash if available
-if (CONTRACT_HASH) {
-  // For contract-package (versioned), we need to get the actual contract hash
-  // The SDK needs hash- format for queries
-  let cleanHash = CONTRACT_HASH
-  if (cleanHash.startsWith('contract-package-')) {
-    cleanHash = cleanHash.replace('contract-package-', 'hash-')
-  } else if (cleanHash.startsWith('contract-')) {
-    cleanHash = cleanHash.replace('contract-', 'hash-')
-  } else if (!cleanHash.startsWith('hash-')) {
-    cleanHash = 'hash-' + cleanHash
-  }
+// Cache for the actual contract hash (resolved from package)
+let resolvedContractHash: string | null = null
+
+// Get the actual contract hash from a contract package
+async function getContractHashFromPackage(): Promise<string | null> {
+  if (resolvedContractHash) return resolvedContractHash
+  if (!CONTRACT_HASH) return null
   
   try {
-    contractClient.setContractHash(cleanHash)
+    const rpcUrl = getRpcUrl()
+    const packageHash = CONTRACT_HASH.replace('contract-package-', '').replace('hash-', '')
+    
+    const response = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'state_get_item',
+        params: {
+          state_root_hash: null,
+          key: `hash-${packageHash}`,
+          path: []
+        },
+        id: Date.now()
+      })
+    })
+    const data = await response.json()
+    
+    if (data.result?.stored_value?.ContractPackage) {
+      const versions = data.result.stored_value.ContractPackage.versions
+      if (versions && versions.length > 0) {
+        const latestVersion = versions[versions.length - 1]
+        resolvedContractHash = latestVersion.contract_hash
+        console.log('Resolved contract hash from package:', resolvedContractHash)
+        
+        // Set it on the contract client
+        if (resolvedContractHash) {
+          contractClient.setContractHash(resolvedContractHash)
+        }
+        return resolvedContractHash
+      }
+    }
   } catch (e) {
-    console.warn('Failed to set contract hash:', e)
+    console.error('Failed to resolve contract hash:', e)
   }
+  return null
 }
+
+// Initialize contract hash resolution
+getContractHashFromPackage()
 
 export interface OnChainCredential {
   id: string
@@ -64,27 +95,32 @@ export async function getTotalCredentials(): Promise<number> {
   try {
     if (!CONTRACT_HASH) return 0
     
-    // Use RPC to query contract state
-    const rpcUrl = getRpcUrl()
-    const packageHash = CONTRACT_HASH.replace('contract-package-', '').replace('hash-', '')
+    // Ensure contract hash is resolved
+    const contractHash = await getContractHashFromPackage()
+    if (!contractHash) return 0
     
+    const rpcUrl = getRpcUrl()
     const response = await fetch(rpcUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         jsonrpc: '2.0',
-        method: 'query_global_state',
+        method: 'state_get_item',
         params: {
-          state_identifier: null,
-          key: `hash-${packageHash}`,
+          state_root_hash: null,
+          key: contractHash,
           path: ['cred_count']
         },
         id: Date.now()
       })
     })
     const data = await response.json()
+    console.log('cred_count query result:', data)
+    
     if (data.result?.stored_value?.CLValue?.parsed) {
-      return parseInt(data.result.stored_value.CLValue.parsed)
+      const count = parseInt(data.result.stored_value.CLValue.parsed)
+      console.log('Total credentials on chain:', count)
+      return count
     }
     return 0
   } catch (e) {
@@ -97,6 +133,10 @@ export async function getTotalCredentials(): Promise<number> {
 export async function verifyCredentialOnChain(credentialId: number): Promise<VerificationResult | null> {
   try {
     if (!CONTRACT_HASH) return null
+    
+    // Ensure contract hash is resolved
+    await getContractHashFromPackage()
+    
     const credential = await contractClient.queryContractDictionary('credentials', credentialId.toString())
     if (!credential) return null
     const data = credential.data as any
@@ -128,6 +168,10 @@ export async function verifyCredentialOnChain(credentialId: number): Promise<Ver
 export async function getCredentialFromChain(credentialId: number): Promise<OnChainCredential | null> {
   try {
     if (!CONTRACT_HASH) return null
+    
+    // Ensure contract hash is resolved
+    await getContractHashFromPackage()
+    
     const credential = await contractClient.queryContractDictionary('credentials', credentialId.toString())
     if (!credential) return null
     const data = credential.data as any
