@@ -1035,14 +1035,24 @@ function VerifierPortal({ credentials, setToast }: { credentials:Credential[], s
   )
 }
 
+// Extended credential with IPFS metadata
+interface CredentialWithMeta extends Credential {
+  metadataHash?: string
+  holderName?: string
+  description?: string
+  imageUrl?: string
+  grade?: string
+  skills?: string
+  licenseNumber?: string
+}
+
 function HolderPortal({ pubKey, credentials, setToast }: { pubKey:string, credentials:Credential[], setToast:(t:any)=>void }) {
-  const [selected, setSelected] = useState<Credential|null>(null)
+  const [selected, setSelected] = useState<CredentialWithMeta|null>(null)
   const [chainCreds, setChainCreds] = useState<OnChainCredential[]>([])
+  const [ipfsData, setIpfsData] = useState<Record<string, any>>({})
   const [loading, setLoading] = useState(false)
   const certRef = useRef<HTMLDivElement>(null)
-  
-  // Combine local and chain credentials
-  const localCreds = credentials.filter(c => c.holder === pubKey)
+  const IPFS_GATEWAY = import.meta.env.VITE_IPFS_GATEWAY || 'https://gateway.pinata.cloud/ipfs/'
   
   // Fetch credentials from chain when pubKey changes
   useEffect(() => {
@@ -1052,49 +1062,307 @@ function HolderPortal({ pubKey, credentials, setToast }: { pubKey:string, creden
         .then(creds => {
           console.log('Fetched chain credentials:', creds)
           setChainCreds(creds)
+          // Fetch IPFS metadata for each credential
+          creds.forEach(c => {
+            if (c.metadataHash && !c.metadataHash.startsWith('Qm0')) {
+              fetch(`${IPFS_GATEWAY}${c.metadataHash}`)
+                .then(r => r.json())
+                .then(data => setIpfsData(prev => ({ ...prev, [c.id]: data })))
+                .catch(() => {})
+            }
+          })
         })
         .catch(e => console.error('Failed to fetch chain creds:', e))
         .finally(() => setLoading(false))
     }
   }, [pubKey])
   
-  // Convert chain credentials to local format and merge
-  const chainCredsAsLocal: Credential[] = chainCreds.map(c => ({
-    id: c.id,
-    issuer: c.issuer,
-    holder: c.holder,
-    type: c.credType,
-    title: c.title,
-    institution: c.institution,
-    issuedAt: c.issuedAt,
-    expiresAt: c.expiresAt,
-    revoked: c.revoked,
-    onChain: true
-  }))
-  
-  // Merge and dedupe by ID
-  const allCreds = [...localCreds]
-  chainCredsAsLocal.forEach(cc => {
-    if (!allCreds.find(lc => lc.id === cc.id)) {
-      allCreds.push(cc)
+  // Convert chain credentials to local format with IPFS data
+  const localCreds = credentials.filter(c => c.holder === pubKey)
+  const chainCredsAsLocal: CredentialWithMeta[] = chainCreds.map(c => {
+    const meta = ipfsData[c.id] || {}
+    return {
+      id: c.id,
+      issuer: c.issuer,
+      holder: c.holder,
+      type: c.credType,
+      title: meta.title || c.title,
+      institution: meta.institution || c.institution,
+      issuedAt: c.issuedAt,
+      expiresAt: c.expiresAt,
+      revoked: c.revoked,
+      onChain: true,
+      metadataHash: c.metadataHash,
+      holderName: meta.holderName,
+      description: meta.description,
+      imageUrl: meta.imageUrl,
+      grade: meta.grade,
+      skills: meta.skills,
+      licenseNumber: meta.licenseNumber
     }
   })
   
+  // Merge and dedupe
+  const allCreds: CredentialWithMeta[] = [...localCreds]
+  chainCredsAsLocal.forEach(cc => {
+    if (!allCreds.find(lc => lc.id === cc.id)) allCreds.push(cc)
+  })
   const myCreds = allCreds
 
-  const exportPDF = async (cred: Credential) => { setSelected(cred); await new Promise(r=>setTimeout(r,100)); if (!certRef.current) return; const canvas = await html2canvas(certRef.current, { backgroundColor: '#0a0a0f' }); const pdf = new jsPDF('l', 'mm', 'a4'); pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 10, 10, 277, 150); pdf.save(`credential-${cred.id}.pdf`); setToast({t:'ok', m:'PDF exported'}) }
+  const exportPDF = async (cred: CredentialWithMeta) => { 
+    setSelected(cred)
+    await new Promise(r=>setTimeout(r,200))
+    if (!certRef.current) return
+    const canvas = await html2canvas(certRef.current, { backgroundColor: '#0a0a0f', scale: 2 })
+    const pdf = new jsPDF('l', 'mm', 'a4')
+    pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 10, 10, 277, 150)
+    pdf.save(`credential-${cred.id}.pdf`)
+    setToast({t:'ok', m:'PDF exported'})
+  }
 
-  if (!pubKey) return (<div className="text-center py-20"><div className="w-20 h-20 bg-green-500/20 rounded-2xl flex items-center justify-center text-4xl mx-auto mb-6">👤</div><h2 className="text-2xl font-bold mb-4">Holder Portal</h2><p className="text-zinc-400 mb-8">Connect your wallet using the button in the header</p></div>)
+  const getTypeIcon = (type: string) => {
+    switch(type) {
+      case 'degree': return '🎓'
+      case 'certificate': return '📜'
+      case 'license': return '📋'
+      case 'employment': return '💼'
+      case 'identity': return '🪪'
+      default: return '📄'
+    }
+  }
+
+  const getTypeColor = (type: string) => {
+    switch(type) {
+      case 'degree': return 'from-purple-500/20 to-purple-900/20 border-purple-500/30'
+      case 'certificate': return 'from-blue-500/20 to-blue-900/20 border-blue-500/30'
+      case 'license': return 'from-amber-500/20 to-amber-900/20 border-amber-500/30'
+      case 'employment': return 'from-green-500/20 to-green-900/20 border-green-500/30'
+      case 'identity': return 'from-cyan-500/20 to-cyan-900/20 border-cyan-500/30'
+      default: return 'from-zinc-500/20 to-zinc-900/20 border-zinc-500/30'
+    }
+  }
+
+  if (!pubKey) return (
+    <div className="text-center py-20">
+      <div className="w-24 h-24 bg-gradient-to-br from-green-500/20 to-emerald-900/20 rounded-3xl flex items-center justify-center text-5xl mx-auto mb-6 border border-green-500/30">👤</div>
+      <h2 className="text-3xl font-bold mb-4">My Credentials</h2>
+      <p className="text-zinc-400 mb-8 max-w-md mx-auto">Connect your wallet to view credentials issued to your address on the Casper blockchain</p>
+    </div>
+  )
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between"><h2 className="text-xl font-semibold">My Credentials</h2><div className="text-sm text-zinc-500">{loading ? 'Loading...' : `${myCreds.length} credential(s)`}</div></div>
-      {loading ? (
-        <div className="text-center py-20 bg-zinc-900/30 rounded-2xl border border-dashed border-zinc-800"><div className="text-4xl mb-4 animate-spin">⏳</div><h3 className="text-xl font-semibold mb-2">Loading Credentials</h3><p className="text-zinc-400">Querying blockchain for your credentials...</p></div>
-      ) : myCreds.length === 0 ? (<div className="text-center py-20 bg-zinc-900/30 rounded-2xl border border-dashed border-zinc-800"><div className="text-6xl mb-4">📭</div><h3 className="text-xl font-semibold mb-2">No Credentials Yet</h3><p className="text-zinc-400">Credentials issued to your address will appear here</p><p className="text-sm text-zinc-500 mt-4 font-mono">{pubKey.slice(0,20)}...</p></div>) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">{myCreds.map(c=>(<div key={c.id} className="p-5 bg-zinc-900/50 rounded-2xl border border-zinc-800 hover:border-zinc-700 transition group"><div className="flex items-start justify-between mb-4"><div className="w-12 h-12 bg-green-500/20 rounded-xl flex items-center justify-center text-2xl">{c.type==='degree'?'🎓':c.type==='certificate'?'📜':c.type==='license'?'📋':'💼'}</div><span className={`px-2 py-1 rounded text-xs ${c.revoked?'bg-red-500/20 text-red-400':'bg-green-500/20 text-green-400'}`}>{c.revoked?'Revoked':'Valid'}</span></div><div className="font-semibold mb-1">{c.title}</div><div className="text-sm text-zinc-500 mb-3">{c.institution}</div><div className="text-xs text-zinc-600 font-mono mb-4">{c.id}</div><div className="flex gap-2 opacity-0 group-hover:opacity-100 transition"><button onClick={()=>setSelected(c)} className="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-xs">View</button><button onClick={()=>exportPDF(c)} className="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-xs">PDF</button><button onClick={()=>{navigator.clipboard.writeText(`${window.location.origin}?id=${c.id}`);setToast({t:'ok',m:'Link copied'})}} className="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-xs">Share</button></div></div>))}</div>
+    <div className="space-y-8">
+      {/* Header Stats */}
+      <div className="bg-gradient-to-r from-green-950/50 to-emerald-950/30 rounded-2xl p-6 border border-green-900/30">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h2 className="text-2xl font-bold mb-1">My Credentials</h2>
+            <p className="text-zinc-400 text-sm">Verifiable credentials issued to your wallet</p>
+          </div>
+          <div className="flex gap-4">
+            <div className="text-center px-4 py-2 bg-zinc-900/50 rounded-xl">
+              <div className="text-2xl font-bold text-green-400">{myCreds.length}</div>
+              <div className="text-xs text-zinc-500">Total</div>
+            </div>
+            <div className="text-center px-4 py-2 bg-zinc-900/50 rounded-xl">
+              <div className="text-2xl font-bold text-emerald-400">{myCreds.filter(c => !c.revoked).length}</div>
+              <div className="text-xs text-zinc-500">Active</div>
+            </div>
+            <div className="text-center px-4 py-2 bg-zinc-900/50 rounded-xl">
+              <div className="text-2xl font-bold text-purple-400">{chainCreds.length}</div>
+              <div className="text-xs text-zinc-500">On-Chain</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Loading State */}
+      {loading && (
+        <div className="text-center py-16 bg-zinc-900/30 rounded-2xl border border-dashed border-zinc-800">
+          <div className="w-16 h-16 border-4 border-green-500/30 border-t-green-500 rounded-full animate-spin mx-auto mb-4"></div>
+          <h3 className="text-xl font-semibold mb-2">Loading Credentials</h3>
+          <p className="text-zinc-400">Querying Casper blockchain...</p>
+        </div>
       )}
-      {selected && (<div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={()=>setSelected(null)}><div ref={certRef} onClick={e=>e.stopPropagation()} className="bg-zinc-900 rounded-2xl p-6 max-w-lg w-full border border-zinc-700 max-h-[90vh] overflow-y-auto"><div className="flex items-center justify-between mb-6"><div className="flex items-center gap-3"><div className="w-14 h-14 bg-green-500/20 rounded-xl flex items-center justify-center text-2xl">{selected.type==='degree'?'🎓':selected.type==='certificate'?'📜':'📋'}</div><div><div className="font-bold">{selected.title}</div><div className="text-sm text-zinc-400">{selected.institution}</div></div></div><QRCodeSVG value={`${window.location.origin}?id=${selected.id}`} size={80} bgColor="transparent" fgColor="#fff"/></div><div className="grid grid-cols-2 gap-3 mb-4"><div className="p-3 bg-zinc-800 rounded-lg"><div className="text-xs text-zinc-500">Type</div><div className="capitalize">{selected.type}</div></div><div className="p-3 bg-zinc-800 rounded-lg"><div className="text-xs text-zinc-500">Status</div><div className={selected.revoked?'text-red-400':'text-green-400'}>{selected.revoked?'Revoked':'Valid'}</div></div><div className="p-3 bg-zinc-800 rounded-lg"><div className="text-xs text-zinc-500">Issued</div><div>{new Date(selected.issuedAt).toLocaleDateString()}</div></div><div className="p-3 bg-zinc-800 rounded-lg"><div className="text-xs text-zinc-500">Expires</div><div>{selected.expiresAt?new Date(selected.expiresAt).toLocaleDateString():'Never'}</div></div></div><div className="p-3 bg-zinc-800 rounded-lg mb-3"><div className="text-xs text-zinc-500">Credential ID</div><code className="text-sm">{selected.id}</code></div>{selected.txHash && <div className="p-3 bg-zinc-800 rounded-lg mb-3"><div className="text-xs text-zinc-500">Transaction Hash ↗</div><a href={`https://testnet.cspr.live/deploy/${selected.txHash}`} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-400 hover:text-blue-300 font-mono break-all">{selected.txHash}</a></div>}{selected.signature && <div className="p-3 bg-zinc-800 rounded-lg mb-4"><div className="text-xs text-zinc-500">Signature</div><code className="text-xs text-zinc-400 break-all">{selected.signature}</code></div>}<div className="flex gap-3"><button onClick={()=>exportPDF(selected)} className="flex-1 py-3 bg-green-600 hover:bg-green-700 rounded-xl">📄 Export PDF</button><button onClick={()=>{navigator.clipboard.writeText(`${window.location.origin}?id=${selected.id}`);setToast({t:'ok',m:'Copied'})}} className="flex-1 py-3 bg-zinc-800 hover:bg-zinc-700 rounded-xl">🔗 Share</button><button onClick={()=>setSelected(null)} className="px-4 py-3 bg-zinc-800 hover:bg-zinc-700 rounded-xl">×</button></div></div></div>)}
+
+      {/* Empty State */}
+      {!loading && myCreds.length === 0 && (
+        <div className="text-center py-16 bg-zinc-900/30 rounded-2xl border border-dashed border-zinc-800">
+          <div className="text-6xl mb-4">📭</div>
+          <h3 className="text-xl font-semibold mb-2">No Credentials Yet</h3>
+          <p className="text-zinc-400 mb-4">Credentials issued to your address will appear here</p>
+          <code className="text-xs text-zinc-600 bg-zinc-800 px-3 py-1 rounded">{pubKey.slice(0,16)}...{pubKey.slice(-8)}</code>
+        </div>
+      )}
+
+      {/* Credentials Grid */}
+      {!loading && myCreds.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {myCreds.map(c => (
+            <div key={c.id} className={`relative overflow-hidden bg-gradient-to-br ${getTypeColor(c.type)} rounded-2xl border p-5 hover:scale-[1.02] transition-all duration-200 cursor-pointer group`} onClick={() => setSelected(c)}>
+              {/* Background Pattern */}
+              <div className="absolute top-0 right-0 w-32 h-32 opacity-5 text-8xl pointer-events-none">{getTypeIcon(c.type)}</div>
+              
+              {/* Header */}
+              <div className="flex items-start justify-between mb-4 relative">
+                <div className="w-14 h-14 bg-white/10 backdrop-blur rounded-xl flex items-center justify-center text-2xl shadow-lg">
+                  {getTypeIcon(c.type)}
+                </div>
+                <div className="flex flex-col items-end gap-1">
+                  <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${c.revoked ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-green-500/20 text-green-400 border border-green-500/30'}`}>
+                    {c.revoked ? '✗ Revoked' : '✓ Valid'}
+                  </span>
+                  {c.onChain && <span className="px-2 py-0.5 bg-purple-500/20 text-purple-400 text-xs rounded border border-purple-500/30">⛓ On-Chain</span>}
+                </div>
+              </div>
+
+              {/* Content */}
+              <div className="relative">
+                {c.holderName && <div className="text-xs text-zinc-400 mb-1">Issued to: {c.holderName}</div>}
+                <h3 className="font-bold text-lg mb-1 line-clamp-2">{c.title}</h3>
+                <p className="text-sm text-zinc-400 mb-3">{c.institution}</p>
+                
+                {/* Extra Info */}
+                <div className="flex flex-wrap gap-2 mb-4">
+                  <span className="px-2 py-1 bg-zinc-800/50 rounded text-xs capitalize">{c.type}</span>
+                  {c.grade && <span className="px-2 py-1 bg-zinc-800/50 rounded text-xs">{c.grade}</span>}
+                  {c.licenseNumber && <span className="px-2 py-1 bg-zinc-800/50 rounded text-xs font-mono">#{c.licenseNumber}</span>}
+                </div>
+
+                {/* Date */}
+                <div className="text-xs text-zinc-500">
+                  Issued {new Date(c.issuedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  {c.expiresAt > 0 && ` • Expires ${new Date(c.expiresAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`}
+                </div>
+              </div>
+
+              {/* Hover Actions */}
+              <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="flex gap-2">
+                  <button className="flex-1 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-xs backdrop-blur">View Details</button>
+                  <button onClick={(e) => { e.stopPropagation(); exportPDF(c) }} className="flex-1 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-xs backdrop-blur">Export PDF</button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Detail Modal */}
+      {selected && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setSelected(null)}>
+          <div ref={certRef} onClick={e => e.stopPropagation()} className={`bg-gradient-to-br ${getTypeColor(selected.type)} rounded-3xl p-8 max-w-2xl w-full border shadow-2xl max-h-[90vh] overflow-y-auto`}>
+            {/* Certificate Header */}
+            <div className="text-center mb-6 pb-6 border-b border-white/10">
+              <div className="w-20 h-20 bg-white/10 backdrop-blur rounded-2xl flex items-center justify-center text-4xl mx-auto mb-4 shadow-lg">
+                {getTypeIcon(selected.type)}
+              </div>
+              <div className="text-xs uppercase tracking-widest text-zinc-400 mb-2">Certificate of {selected.type}</div>
+              <h2 className="text-2xl font-bold mb-2">{selected.title}</h2>
+              <p className="text-zinc-400">{selected.institution}</p>
+            </div>
+
+            {/* Holder Info */}
+            {selected.holderName && (
+              <div className="text-center mb-6">
+                <div className="text-xs text-zinc-500 mb-1">This credential is issued to</div>
+                <div className="text-xl font-semibold">{selected.holderName}</div>
+              </div>
+            )}
+
+            {/* Description */}
+            {selected.description && (
+              <div className="mb-6 p-4 bg-zinc-900/50 rounded-xl">
+                <p className="text-sm text-zinc-300">{selected.description}</p>
+              </div>
+            )}
+
+            {/* Details Grid */}
+            <div className="grid grid-cols-2 gap-3 mb-6">
+              <div className="p-4 bg-zinc-900/50 rounded-xl">
+                <div className="text-xs text-zinc-500 mb-1">Status</div>
+                <div className={`font-semibold ${selected.revoked ? 'text-red-400' : 'text-green-400'}`}>
+                  {selected.revoked ? '✗ Revoked' : '✓ Valid'}
+                </div>
+              </div>
+              <div className="p-4 bg-zinc-900/50 rounded-xl">
+                <div className="text-xs text-zinc-500 mb-1">Type</div>
+                <div className="font-semibold capitalize">{selected.type}</div>
+              </div>
+              <div className="p-4 bg-zinc-900/50 rounded-xl">
+                <div className="text-xs text-zinc-500 mb-1">Issue Date</div>
+                <div className="font-semibold">{new Date(selected.issuedAt).toLocaleDateString()}</div>
+              </div>
+              <div className="p-4 bg-zinc-900/50 rounded-xl">
+                <div className="text-xs text-zinc-500 mb-1">Expiration</div>
+                <div className="font-semibold">{selected.expiresAt ? new Date(selected.expiresAt).toLocaleDateString() : 'Never'}</div>
+              </div>
+              {selected.grade && (
+                <div className="p-4 bg-zinc-900/50 rounded-xl">
+                  <div className="text-xs text-zinc-500 mb-1">Grade/Status</div>
+                  <div className="font-semibold">{selected.grade}</div>
+                </div>
+              )}
+              {selected.licenseNumber && (
+                <div className="p-4 bg-zinc-900/50 rounded-xl">
+                  <div className="text-xs text-zinc-500 mb-1">License Number</div>
+                  <div className="font-semibold font-mono">{selected.licenseNumber}</div>
+                </div>
+              )}
+              {selected.skills && (
+                <div className="p-4 bg-zinc-900/50 rounded-xl col-span-2">
+                  <div className="text-xs text-zinc-500 mb-1">Skills/Specialization</div>
+                  <div className="font-semibold">{selected.skills}</div>
+                </div>
+              )}
+            </div>
+
+            {/* Blockchain Info */}
+            <div className="space-y-3 mb-6">
+              <div className="p-4 bg-zinc-900/50 rounded-xl">
+                <div className="text-xs text-zinc-500 mb-1">Credential ID</div>
+                <code className="text-sm text-zinc-300">{selected.id}</code>
+              </div>
+              {selected.metadataHash && (
+                <div className="p-4 bg-zinc-900/50 rounded-xl">
+                  <div className="text-xs text-zinc-500 mb-1">IPFS Metadata</div>
+                  <a href={`${IPFS_GATEWAY}${selected.metadataHash}`} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-400 hover:text-blue-300 font-mono break-all">
+                    {selected.metadataHash}
+                  </a>
+                </div>
+              )}
+              {selected.txHash && (
+                <div className="p-4 bg-zinc-900/50 rounded-xl">
+                  <div className="text-xs text-zinc-500 mb-1">Transaction Hash</div>
+                  <a href={`https://testnet.cspr.live/deploy/${selected.txHash}`} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-400 hover:text-blue-300 font-mono break-all">
+                    {selected.txHash}
+                  </a>
+                </div>
+              )}
+            </div>
+
+            {/* QR Code */}
+            <div className="flex justify-center mb-6">
+              <div className="p-4 bg-white rounded-xl">
+                <QRCodeSVG value={`${window.location.origin}/verify?id=${selected.id}`} size={120} />
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-3">
+              <button onClick={() => exportPDF(selected)} className="flex-1 py-3 bg-green-600 hover:bg-green-700 rounded-xl font-medium transition">
+                📄 Export PDF
+              </button>
+              <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/verify?id=${selected.id}`); setToast({t:'ok', m:'Link copied'}) }} className="flex-1 py-3 bg-zinc-800 hover:bg-zinc-700 rounded-xl font-medium transition">
+                🔗 Share Link
+              </button>
+              <button onClick={() => setSelected(null)} className="px-6 py-3 bg-zinc-800 hover:bg-zinc-700 rounded-xl font-medium transition">
+                ✕
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
