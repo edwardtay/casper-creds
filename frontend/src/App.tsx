@@ -856,9 +856,11 @@ function IssuerPortal({ pubKey, credentials, addCredential, setToast, clickRef }
             </div>
           </form>
           <div className="p-4 bg-zinc-900/50 rounded-xl border border-zinc-800"><h4 className="font-medium mb-3">Quick Templates</h4><div className="space-y-2">{[
-            {t:'degree',n:'BSc Computer Science',i:'MIT',g:'3.8 GPA',s:'Python, Algorithms, Data Structures',d:'Bachelor of Science degree in Computer Science with focus on software engineering'},
-            {t:'certificate',n:'AWS Solutions Architect',i:'Amazon Web Services',g:'Pass',s:'AWS, Cloud Architecture, EC2, S3, Lambda',d:'Professional certification for designing distributed systems on AWS'},
-            {t:'license',n:'Professional Engineer',i:'State Board of Engineering',g:'Licensed',s:'Civil Engineering, Structural Analysis',d:'Licensed Professional Engineer authorized to practice engineering'}
+            {t:'degree',n:'BSc Computer Science',i:'MIT',g:'3.8 GPA',s:'Computer Science',d:'Bachelor of Science degree in Computer Science'},
+            {t:'certificate',n:'AWS Solutions Architect',i:'Amazon Web Services',g:'Pass',s:'AWS, Cloud, EC2, S3',d:'Professional cloud architecture certification'},
+            {t:'license',n:'Professional Engineer',i:'State Board of Engineering',g:'Licensed',s:'Civil Engineering',d:'Licensed Professional Engineer'},
+            {t:'employment',n:'Senior Software Engineer',i:'Google',g:'',s:'Full-stack, React, Go',d:'Full-time employment verification'},
+            {t:'identity',n:'Government ID',i:'Department of State',g:'',s:'',d:'Official identity document'}
           ].map((q,i)=><button key={i} onClick={()=>setForm({...form,type:q.t,title:q.n,institution:q.i,grade:q.g,skills:q.s,description:q.d})} className="w-full p-3 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-left text-sm">{q.n}</button>)}</div></div>
         </div>
       )}
