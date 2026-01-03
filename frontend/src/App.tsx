@@ -981,26 +981,36 @@ function HolderPortal({ pubKey, credentials, setToast }: { pubKey:string, creden
   const certRef = useRef<HTMLDivElement>(null)
   const IPFS_GATEWAY = import.meta.env.VITE_IPFS_GATEWAY || 'https://gateway.pinata.cloud/ipfs/'
   
-  // Fetch credentials from chain when pubKey changes
+  // Fetch credentials from chain
+  const fetchCredentials = async () => {
+    if (!pubKey || !isContractConfigured()) return
+    setLoading(true)
+    try {
+      const creds = await getCredentialsByHolder(pubKey)
+      console.log('Fetched chain credentials:', creds)
+      setChainCreds(creds)
+      // Fetch IPFS metadata for each credential
+      creds.forEach(c => {
+        if (c.metadataHash && !c.metadataHash.startsWith('Qm0')) {
+          fetch(`${IPFS_GATEWAY}${c.metadataHash}`)
+            .then(r => r.json())
+            .then(data => setIpfsData(prev => ({ ...prev, [c.id]: data })))
+            .catch(() => {})
+        }
+      })
+      setToast({t:'ok', m:`Found ${creds.length} credential(s) on-chain`})
+    } catch (e) {
+      console.error('Failed to fetch chain creds:', e)
+      setToast({t:'err', m:'Failed to fetch credentials'})
+    } finally {
+      setLoading(false)
+    }
+  }
+  
+  // Fetch on mount
   useEffect(() => {
     if (pubKey && isContractConfigured()) {
-      setLoading(true)
-      getCredentialsByHolder(pubKey)
-        .then(creds => {
-          console.log('Fetched chain credentials:', creds)
-          setChainCreds(creds)
-          // Fetch IPFS metadata for each credential
-          creds.forEach(c => {
-            if (c.metadataHash && !c.metadataHash.startsWith('Qm0')) {
-              fetch(`${IPFS_GATEWAY}${c.metadataHash}`)
-                .then(r => r.json())
-                .then(data => setIpfsData(prev => ({ ...prev, [c.id]: data })))
-                .catch(() => {})
-            }
-          })
-        })
-        .catch(e => console.error('Failed to fetch chain creds:', e))
-        .finally(() => setLoading(false))
+      fetchCredentials()
     }
   }, [pubKey])
   
@@ -1086,7 +1096,15 @@ function HolderPortal({ pubKey, credentials, setToast }: { pubKey:string, creden
             <h2 className="text-2xl font-bold mb-1">My Credentials</h2>
             <p className="text-zinc-400 text-sm">Verifiable credentials issued to your wallet</p>
           </div>
-          <div className="flex gap-4">
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={fetchCredentials} 
+              disabled={loading}
+              className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 rounded-xl font-medium transition flex items-center gap-2"
+            >
+              <span className={loading ? 'animate-spin' : ''}>🔄</span>
+              {loading ? 'Loading...' : 'Refresh'}
+            </button>
             <div className="text-center px-4 py-2 bg-zinc-900/50 rounded-xl">
               <div className="text-2xl font-bold text-green-400">{myCreds.length}</div>
               <div className="text-xs text-zinc-500">Total</div>
