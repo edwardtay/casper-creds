@@ -97,7 +97,9 @@ async function getEventsLength(): Promise<number> {
     if (!contractHash) return 0
     
     const rpcUrl = getRpcUrl()
-    const response = await fetch(rpcUrl, {
+    
+    // First get the contract to find the __events_length URef
+    const contractResponse = await fetch(rpcUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -106,16 +108,41 @@ async function getEventsLength(): Promise<number> {
         params: {
           state_root_hash: null,
           key: contractHash,
-          path: ['__events_length']
+          path: []
         },
         id: Date.now()
       })
     })
-    const data = await response.json()
-    console.log('__events_length result:', data)
+    const contractData = await contractResponse.json()
     
-    if (data.result?.stored_value?.CLValue?.parsed) {
-      return parseInt(data.result.stored_value.CLValue.parsed)
+    // Find __events_length in named_keys
+    const namedKeys = contractData.result?.stored_value?.Contract?.named_keys || []
+    const eventsLengthKey = namedKeys.find((nk: any) => nk.name === '__events_length')
+    if (!eventsLengthKey) {
+      console.log('__events_length not found in named keys')
+      return 0
+    }
+    
+    // Query the URef directly
+    const lengthResponse = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'state_get_item',
+        params: {
+          state_root_hash: null,
+          key: eventsLengthKey.key,
+          path: []
+        },
+        id: Date.now()
+      })
+    })
+    const lengthData = await lengthResponse.json()
+    console.log('__events_length result:', lengthData)
+    
+    if (lengthData.result?.stored_value?.CLValue?.parsed !== undefined) {
+      return parseInt(lengthData.result.stored_value.CLValue.parsed)
     }
     return 0
   } catch (e) {
@@ -124,14 +151,18 @@ async function getEventsLength(): Promise<number> {
   }
 }
 
+// Cache for events dictionary URef
+let eventsDictURef: string | null = null
+
 // Get the __events dictionary URef from contract
 async function getEventsDictURef(): Promise<string | null> {
+  if (eventsDictURef) return eventsDictURef
+  
   try {
     const contractHash = await getContractHashFromPackage()
     if (!contractHash) return null
     
     const rpcUrl = getRpcUrl()
-    // Query the contract to get its named keys
     const response = await fetch(rpcUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -147,14 +178,14 @@ async function getEventsDictURef(): Promise<string | null> {
       })
     })
     const data = await response.json()
-    console.log('Contract state:', data)
     
     // Find __events in named_keys
     const namedKeys = data.result?.stored_value?.Contract?.named_keys || []
     const eventsKey = namedKeys.find((nk: any) => nk.name === '__events')
     if (eventsKey) {
       console.log('Found __events URef:', eventsKey.key)
-      return eventsKey.key
+      eventsDictURef = eventsKey.key
+      return eventsDictURef
     }
     return null
   } catch (e) {
@@ -169,59 +200,101 @@ function parseCredentialIssuedEvent(eventData: any): OnChainCredential | null {
   try {
     console.log('Parsing event data:', JSON.stringify(eventData, null, 2))
     
-    // Handle different possible formats
-    let parsed = eventData
-    if (typeof eventData === 'string') {
-      // Could be hex bytes or JSON string
-      if (eventData.startsWith('{')) {
-        try { parsed = JSON.parse(eventData) } catch {}
+    // The event data is a byte array (List<U8>)
+    // Format: [name_length(u32), name_bytes..., event_data...]
+    // For CredentialIssued: name = "event_CredentialIssued"
+    
+    let bytes: number[] = []
+    
+    if (Array.isArray(eventData)) {
+      bytes = eventData
+    } else if (typeof eventData === 'string') {
+      // Hex string
+      for (let i = 0; i < eventData.length; i += 2) {
+        bytes.push(parseInt(eventData.substring(i, i + 2), 16))
       }
+    } else {
+      return null
     }
     
-    // Odra CES format: events are stored with a type discriminator
-    // Format could be: { "CredentialIssued": { id, issuer, holder, ... } }
-    // Or: { name: "CredentialIssued", data: { ... } }
-    // Or: [ type_index, { ... } ] (tuple format)
+    if (bytes.length < 30) return null
     
-    // Check for named event format
-    if (parsed?.CredentialIssued) {
-      const d = parsed.CredentialIssued
-      return extractCredentialFromData(d)
+    // Read name length (first 4 bytes, little-endian u32)
+    const nameLength = bytes[0] | (bytes[1] << 8) | (bytes[2] << 16) | (bytes[3] << 24)
+    
+    // Read event name
+    const nameBytes = bytes.slice(4, 4 + nameLength)
+    const eventName = String.fromCharCode(...nameBytes)
+    console.log('Event name:', eventName, 'length:', nameLength)
+    
+    // Check if this is a CredentialIssued event
+    if (!eventName.includes('CredentialIssued')) {
+      console.log('Not a CredentialIssued event, skipping')
+      return null
     }
     
-    // Check for name/data format
-    if (parsed?.name === 'CredentialIssued' && parsed?.data) {
-      return extractCredentialFromData(parsed.data)
+    // Parse the event data after the name
+    // CredentialIssued { id: U256, issuer: Address, holder: Address, cred_type: String, timestamp: u64 }
+    const dataStart = 4 + nameLength
+    const dataBytes = bytes.slice(dataStart)
+    
+    // Parse U256 id (32 bytes, little-endian)
+    // For small numbers, just read first few bytes
+    let id = 0
+    for (let i = 0; i < Math.min(8, dataBytes.length); i++) {
+      id += dataBytes[i] * Math.pow(256, i)
     }
     
-    // Check for array/tuple format [type, data]
-    if (Array.isArray(parsed) && parsed.length >= 2) {
-      const [typeOrName, data] = parsed
-      if (typeOrName === 'CredentialIssued' || typeOrName === 0) {
-        return extractCredentialFromData(data)
-      }
+    // Parse issuer Address (1 byte tag + 32 bytes hash)
+    // Tag: 0x00 = Account, 0x01 = Contract
+    const issuerStart = 32 // After U256
+    const issuerTag = dataBytes[issuerStart]
+    const issuerHash = dataBytes.slice(issuerStart + 1, issuerStart + 33)
+    const issuerHex = issuerHash.map(b => b.toString(16).padStart(2, '0')).join('')
+    const issuer = issuerTag === 0 ? `account-hash-${issuerHex}` : `contract-${issuerHex}`
+    
+    // Parse holder Address (1 byte tag + 32 bytes hash)
+    const holderStart = issuerStart + 33
+    const holderTag = dataBytes[holderStart]
+    const holderHash = dataBytes.slice(holderStart + 1, holderStart + 33)
+    const holderHex = holderHash.map(b => b.toString(16).padStart(2, '0')).join('')
+    const holder = holderTag === 0 ? `account-hash-${holderHex}` : `contract-${holderHex}`
+    
+    // Parse cred_type String (4 byte length + bytes)
+    const credTypeStart = holderStart + 33
+    const credTypeLen = dataBytes[credTypeStart] | (dataBytes[credTypeStart + 1] << 8) | 
+                        (dataBytes[credTypeStart + 2] << 16) | (dataBytes[credTypeStart + 3] << 24)
+    const credTypeBytes = dataBytes.slice(credTypeStart + 4, credTypeStart + 4 + credTypeLen)
+    const credType = String.fromCharCode(...credTypeBytes)
+    
+    // Parse timestamp u64 (8 bytes, little-endian)
+    const timestampStart = credTypeStart + 4 + credTypeLen
+    let timestamp = 0
+    for (let i = 0; i < 8 && timestampStart + i < dataBytes.length; i++) {
+      timestamp += dataBytes[timestampStart + i] * Math.pow(256, i)
     }
     
-    // Check if it's directly the credential data (has id, holder, issuer)
-    if (parsed?.id !== undefined && parsed?.holder !== undefined && parsed?.issuer !== undefined) {
-      return extractCredentialFromData(parsed)
-    }
+    console.log('Parsed event:', { id, issuer, holder, credType, timestamp })
     
-    // Check for nested data
-    if (parsed?.data && parsed.data?.id !== undefined) {
-      return extractCredentialFromData(parsed.data)
+    return {
+      id: String(id),
+      issuer,
+      holder,
+      credType,
+      title: '', // Not in event
+      institution: '',
+      issuedAt: timestamp,
+      expiresAt: 0,
+      revoked: false,
+      metadataHash: ''
     }
-    
-    // Log unrecognized format for debugging
-    console.log('Unrecognized event format, skipping')
-    return null
   } catch (e) {
     console.error('Error parsing event:', e)
     return null
   }
 }
 
-// Helper to extract credential from various data formats
+// Helper to extract credential from various data formats (fallback)
 function extractCredentialFromData(d: any): OnChainCredential | null {
   if (!d) return null
   
