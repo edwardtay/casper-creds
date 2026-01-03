@@ -260,37 +260,25 @@ function parseCredentialIssuedEvent(eventData: any): OnChainCredential | null {
     const dataStart = 4 + nameLength
     const dataBytes = bytes.slice(dataStart)
     
-    console.log('=== PARSING EVENT ===')
-    console.log('Event name:', eventName)
-    console.log('Data length:', dataBytes.length)
-    
     // Find Address tags by scanning - look for 0x00 followed by plausible hash bytes
-    // Account hashes typically start with non-zero bytes
     const addressPositions: number[] = []
     for (let i = 0; i < Math.min(100, dataBytes.length - 32); i++) {
       if (dataBytes[i] === 0x00 && dataBytes[i + 1] !== 0x00) {
-        // Potential Account address tag
         addressPositions.push(i)
-        console.log(`Found potential Account tag at position ${i}`)
       }
     }
     
-    // Parse U256 id (32 bytes, little-endian) - first 32 bytes
+    // Parse U256 id (32 bytes, little-endian)
     let id = 0
     for (let i = 0; i < Math.min(8, dataBytes.length); i++) {
       id += dataBytes[i] * Math.pow(256, i)
     }
-    console.log('ID:', id)
-    
-    // Based on CES format, after U256 (32 bytes) comes the addresses
-    // But Odra might serialize differently - let's try finding the addresses
     
     let issuer = ''
     let holder = ''
     let credType = ''
     let timestamp = 0
     
-    // If we found address positions, use them
     if (addressPositions.length >= 2) {
       const issuerPos = addressPositions[0]
       const holderPos = addressPositions[1]
@@ -301,9 +289,6 @@ function parseCredentialIssuedEvent(eventData: any): OnChainCredential | null {
       issuer = `account-hash-${issuerHash.map(b => b.toString(16).padStart(2, '0')).join('')}`
       holder = `account-hash-${holderHash.map(b => b.toString(16).padStart(2, '0')).join('')}`
       
-      console.log('Issuer (from scan):', issuer.substring(0, 40) + '...')
-      console.log('Holder (from scan):', holder.substring(0, 40) + '...')
-      
       // String starts after holder address
       const credTypeStart = holderPos + 33
       if (credTypeStart + 4 < dataBytes.length) {
@@ -312,7 +297,6 @@ function parseCredentialIssuedEvent(eventData: any): OnChainCredential | null {
         if (credTypeLen > 0 && credTypeLen < 100 && credTypeStart + 4 + credTypeLen <= dataBytes.length) {
           const credTypeBytes = dataBytes.slice(credTypeStart + 4, credTypeStart + 4 + credTypeLen)
           credType = String.fromCharCode(...credTypeBytes)
-          console.log('Cred type:', credType)
           
           // Timestamp after string
           const timestampStart = credTypeStart + 4 + credTypeLen
@@ -320,29 +304,10 @@ function parseCredentialIssuedEvent(eventData: any): OnChainCredential | null {
             for (let i = 0; i < 8; i++) {
               timestamp += dataBytes[timestampStart + i] * Math.pow(256, i)
             }
-            console.log('Timestamp:', timestamp)
           }
         }
       }
-    } else {
-      // Fallback: use fixed offsets (original assumption)
-      const issuerStart = 32
-      const issuerTag = dataBytes[issuerStart]
-      const issuerHashBytes = dataBytes.slice(issuerStart + 1, issuerStart + 33)
-      issuer = (issuerTag === 0 ? 'account-hash-' : 'contract-') + 
-               issuerHashBytes.map(b => b.toString(16).padStart(2, '0')).join('')
-      
-      const holderStart = 65
-      const holderTag = dataBytes[holderStart]
-      const holderHashBytes = dataBytes.slice(holderStart + 1, holderStart + 33)
-      holder = (holderTag === 0 ? 'account-hash-' : 'contract-') + 
-               holderHashBytes.map(b => b.toString(16).padStart(2, '0')).join('')
-      
-      console.log('Using fixed offsets - issuer:', issuer.substring(0, 40))
-      console.log('Using fixed offsets - holder:', holder.substring(0, 40))
     }
-    
-    console.log('=== END PARSING ===')
     
     return {
       id: String(id),
@@ -357,7 +322,7 @@ function parseCredentialIssuedEvent(eventData: any): OnChainCredential | null {
       metadataHash: ''
     }
   } catch (e) {
-    console.error('Error parsing event:', e)
+    console.error('Event parse error:', e)
     return null
   }
 }
@@ -523,35 +488,19 @@ export async function getCredentialsByHolder(holderPublicKey: string): Promise<O
   try {
     if (!CONTRACT_HASH) return []
     
-    // Convert public key to account hash for comparison
     const holderKey = CLPublicKey.fromHex(holderPublicKey)
-    const accountHashStr = holderKey.toAccountHashStr()
-    const accountHash = accountHashStr.replace('account-hash-', '').toLowerCase()
+    const accountHash = holderKey.toAccountHashStr().replace('account-hash-', '').toLowerCase()
     
-    console.log('=== HOLDER LOOKUP ===')
-    console.log('Public key:', holderPublicKey)
-    console.log('Account hash string:', accountHashStr)
-    console.log('Account hash (for comparison):', accountHash)
-    
-    // Get all credential events
     const allCreds = await getCredentialEvents()
-    console.log('All credential events:', allCreds.length)
     
-    // Filter by holder - compare just the hash part, ignoring prefix
     const holderCreds = allCreds.filter(cred => {
-      // Extract just the hash part from holder (remove any prefix)
       const credHolderHash = cred.holder
         .replace('account-hash-', '')
         .replace('contract-', '')
         .toLowerCase()
-      
-      const match = credHolderHash === accountHash
-      console.log(`Credential ${cred.id}: holder=${credHolderHash.substring(0, 16)}... match=${match}`)
-      return match
+      return credHolderHash === accountHash
     })
     
-    console.log('Credentials for holder:', holderCreds.length)
-    console.log('=== END HOLDER LOOKUP ===')
     return holderCreds
   } catch (e) {
     console.error('Error getting credentials by holder:', e)
