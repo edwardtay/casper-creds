@@ -454,29 +454,80 @@ export async function verifyCredentialOnChain(credentialId: number): Promise<Ver
   }
 }
 
-// Get credential by ID from contract
+// Get credential by ID from contract using Odra's getter
 export async function getCredentialFromChain(credentialId: number): Promise<OnChainCredential | null> {
   try {
     if (!CONTRACT_HASH) return null
     
-    // Ensure contract hash is resolved
-    await getContractHashFromPackage()
+    const contractHash = await getContractHashFromPackage()
+    if (!contractHash) return null
     
-    const credential = await contractClient.queryContractDictionary('credentials', credentialId.toString())
-    if (!credential) return null
-    const data = credential.data as any
-    return {
-      id: credentialId.toString(),
-      issuer: data.issuer?.data?.data || '',
-      holder: data.holder?.data?.data || '',
-      credType: data.cred_type || '',
-      title: data.title || '',
-      institution: data.institution || '',
-      issuedAt: parseInt(data.issued_at || '0'),
-      expiresAt: parseInt(data.expires_at || '0'),
-      revoked: data.revoked || false,
-      metadataHash: data.metadata_hash || ''
+    const stateRootHash = await getStateRootHash()
+    if (!stateRootHash) return null
+    
+    // Query the credentials dictionary using Odra's key format
+    // Odra stores Mapping data in a dictionary with the key being the serialized key
+    const rpcUrl = getRpcUrl()
+    
+    // First, get the contract to find the credentials dictionary URef
+    const contractResponse = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'state_get_item',
+        params: {
+          state_root_hash: stateRootHash,
+          key: contractHash,
+          path: []
+        },
+        id: Date.now()
+      })
+    })
+    const contractData = await contractResponse.json()
+    
+    // Find credentials dictionary in named_keys
+    const namedKeys = contractData.result?.stored_value?.Contract?.named_keys || []
+    const credentialsKey = namedKeys.find((nk: any) => nk.name === 'credentials')
+    if (!credentialsKey) return null
+    
+    // Query the dictionary item
+    const response = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'state_get_dictionary_item',
+        params: {
+          state_root_hash: stateRootHash,
+          dictionary_identifier: {
+            URef: {
+              seed_uref: credentialsKey.key,
+              dictionary_item_key: credentialId.toString()
+            }
+          }
+        },
+        id: Date.now()
+      })
+    })
+    const data = await response.json()
+    
+    if (data.result?.stored_value?.CLValue?.parsed) {
+      const parsed = data.result.stored_value.CLValue.parsed
+      return {
+        id: credentialId.toString(),
+        issuer: parsed.issuer || '',
+        holder: parsed.holder || '',
+        credType: parsed.cred_type || '',
+        title: parsed.title || '',
+        institution: parsed.institution || '',
+        issuedAt: parseInt(parsed.issued_at || '0'),
+        expiresAt: parseInt(parsed.expires_at || '0'),
+        revoked: parsed.revoked || false,
+        metadataHash: parsed.metadata_hash || ''
+      }
     }
+    return null
   } catch (e) {
     console.error('Error getting credential:', e)
     return null
@@ -501,7 +552,22 @@ export async function getCredentialsByHolder(holderPublicKey: string): Promise<O
       return credHolderHash === accountHash
     })
     
-    return holderCreds
+    // Enrich with full credential data from contract
+    const enrichedCreds = await Promise.all(
+      holderCreds.map(async (cred) => {
+        try {
+          const fullCred = await getCredentialFromChain(parseInt(cred.id))
+          if (fullCred) {
+            return { ...cred, ...fullCred }
+          }
+        } catch (e) {
+          // Fallback to event data
+        }
+        return cred
+      })
+    )
+    
+    return enrichedCreds
   } catch (e) {
     console.error('Error getting credentials by holder:', e)
     return []
