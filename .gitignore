@@ -1,28 +1,25 @@
 # Dependencies
 node_modules/
-frontend/node_modules/
 
 # Build outputs
 dist/
 build/
+contracts/target/
 
-# Environment (use Vercel dashboard for production env vars)
+# Environment
 .env
 .env.local
-frontend/.env
-frontend/.env.local
-contracts/.env
+*.env
 
-# Secrets - NEVER commit these
+# Private/sensitive files
+private/
 *.pem
-secret_key.pem
-Account*.pem
 
 # IDE
 .idea/
 .vscode/
+.cursor/
 *.swp
-*.swo
 
 # OS
 .DS_Store
@@ -30,11 +27,3 @@ Thumbs.db
 
 # Logs
 *.log
-npm-debug.log*
-
-# Cache
-.cache/
-.parcel-cache/
-
-# Rust build artifacts
-contracts/target/
