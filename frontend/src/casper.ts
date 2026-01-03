@@ -20,12 +20,37 @@ const contractClient = new Contracts.Contract(casperClient)
 // Cache for the actual contract hash (resolved from package)
 let resolvedContractHash: string | null = null
 
+// Get current state root hash
+async function getStateRootHash(): Promise<string | null> {
+  try {
+    const rpcUrl = getRpcUrl()
+    const response = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'chain_get_state_root_hash',
+        params: [],
+        id: Date.now()
+      })
+    })
+    const data = await response.json()
+    return data.result?.state_root_hash || null
+  } catch (e) {
+    console.error('Error getting state root hash:', e)
+    return null
+  }
+}
+
 // Get the actual contract hash from a contract package
 async function getContractHashFromPackage(): Promise<string | null> {
   if (resolvedContractHash) return resolvedContractHash
   if (!CONTRACT_HASH) return null
   
   try {
+    const stateRootHash = await getStateRootHash()
+    if (!stateRootHash) return null
+    
     const rpcUrl = getRpcUrl()
     const packageHash = CONTRACT_HASH.replace('contract-package-', '').replace('hash-', '')
     
@@ -36,7 +61,7 @@ async function getContractHashFromPackage(): Promise<string | null> {
         jsonrpc: '2.0',
         method: 'state_get_item',
         params: {
-          state_root_hash: null,
+          state_root_hash: stateRootHash,
           key: `hash-${packageHash}`,
           path: []
         },
@@ -89,12 +114,17 @@ export interface VerificationResult {
   issuerActive: boolean
 }
 
-
 // Get events length from contract's __events_length named key
 async function getEventsLength(): Promise<number> {
   try {
     const contractHash = await getContractHashFromPackage()
     if (!contractHash) return 0
+    
+    const stateRootHash = await getStateRootHash()
+    if (!stateRootHash) {
+      console.log('Could not get state root hash')
+      return 0
+    }
     
     const rpcUrl = getRpcUrl()
     
@@ -106,7 +136,7 @@ async function getEventsLength(): Promise<number> {
         jsonrpc: '2.0',
         method: 'state_get_item',
         params: {
-          state_root_hash: null,
+          state_root_hash: stateRootHash,
           key: contractHash,
           path: []
         },
@@ -114,12 +144,13 @@ async function getEventsLength(): Promise<number> {
       })
     })
     const contractData = await contractResponse.json()
+    console.log('Contract data:', contractData)
     
     // Find __events_length in named_keys
     const namedKeys = contractData.result?.stored_value?.Contract?.named_keys || []
     const eventsLengthKey = namedKeys.find((nk: any) => nk.name === '__events_length')
     if (!eventsLengthKey) {
-      console.log('__events_length not found in named keys')
+      console.log('__events_length not found in named keys:', namedKeys.map((k: any) => k.name))
       return 0
     }
     
@@ -131,7 +162,7 @@ async function getEventsLength(): Promise<number> {
         jsonrpc: '2.0',
         method: 'state_get_item',
         params: {
-          state_root_hash: null,
+          state_root_hash: stateRootHash,
           key: eventsLengthKey.key,
           path: []
         },
@@ -162,6 +193,9 @@ async function getEventsDictURef(): Promise<string | null> {
     const contractHash = await getContractHashFromPackage()
     if (!contractHash) return null
     
+    const stateRootHash = await getStateRootHash()
+    if (!stateRootHash) return null
+    
     const rpcUrl = getRpcUrl()
     const response = await fetch(rpcUrl, {
       method: 'POST',
@@ -170,7 +204,7 @@ async function getEventsDictURef(): Promise<string | null> {
         jsonrpc: '2.0',
         method: 'state_get_item',
         params: {
-          state_root_hash: null,
+          state_root_hash: stateRootHash,
           key: contractHash,
           path: []
         },
@@ -297,6 +331,9 @@ function parseCredentialIssuedEvent(eventData: any): OnChainCredential | null {
 // Fetch a single event by index from __events dictionary
 async function getEventByIndex(dictURef: string, index: number): Promise<any> {
   try {
+    const stateRootHash = await getStateRootHash()
+    if (!stateRootHash) return null
+    
     const rpcUrl = getRpcUrl()
     const response = await fetch(rpcUrl, {
       method: 'POST',
@@ -305,7 +342,7 @@ async function getEventByIndex(dictURef: string, index: number): Promise<any> {
         jsonrpc: '2.0',
         method: 'state_get_dictionary_item',
         params: {
-          state_root_hash: null,
+          state_root_hash: stateRootHash,
           dictionary_identifier: {
             URef: {
               seed_uref: dictURef,
